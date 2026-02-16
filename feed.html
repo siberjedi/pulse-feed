@@ -11,17 +11,9 @@
     <div id="backgroundLayer" class="background-layer"></div>
     <div class="overlay-shade"></div>
 
-    <section class="visualizer-zone top-zone">
-      <canvas id="visualizerTop"></canvas>
-    </section>
-
-    <section class="lyrics-zone" id="lyricsZone">
-      <div id="lyricLine" class="lyric-line">Admin panelden lyric ekleyin</div>
-    </section>
-
-    <section class="visualizer-zone bottom-zone">
-      <canvas id="visualizerBottom"></canvas>
-    </section>
+    <section class="visualizer-zone top-zone"><canvas id="visualizerTop"></canvas></section>
+    <section class="lyrics-zone" id="lyricsZone"><div id="lyricLine" class="lyric-line"></div></section>
+    <section class="visualizer-zone bottom-zone"><canvas id="visualizerBottom"></canvas></section>
 
     <article id="musicPlayer" class="music-player">
       <div class="mini-visualizer"><canvas id="playerViz"></canvas></div>
@@ -29,13 +21,12 @@
       <p class="artist">PulseFeed</p>
       <div class="time-row"><span id="currentTime">0:00</span><span id="duration">0:00</span></div>
       <input id="seekBar" type="range" min="0" max="100" value="0" />
-      <div class="button-row player-buttons">
-        <button id="playBtn" type="button">▶</button>
-      </div>
+      <div class="button-row player-buttons"><button id="playBtn" type="button">▶</button></div>
     </article>
 
     <div class="feed-tools">
       <a class="nav-btn" href="admin.html">Admin</a>
+      <button id="stagePlayBtn" type="button">▶ Müziği Başlat / Durdur</button>
       <button id="recordBtn" type="button">🎥 Fullscreen Kayda Başla</button>
       <a id="downloadRecord" class="nav-btn hidden" download="lyric-video.webm">Kaydı İndir</a>
     </div>

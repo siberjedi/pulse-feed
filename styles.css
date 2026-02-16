@@ -157,6 +157,19 @@ button, .nav-btn {
   font-size: 1.2rem;
 }
 
+.section-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.manage-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
 .sticky-footer {
   position: sticky;
   bottom: 8px;
