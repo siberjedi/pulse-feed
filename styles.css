@@ -312,3 +312,10 @@ button, .nav-btn {
   .lyrics-zone { left: 4%; width: 92%; }
   .music-player { width: 220px; }
 }
+
+
+
+
+body.recording-mode .feed-tools {
+  display: none;
+}

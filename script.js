@@ -50,6 +50,8 @@
     mediaRecorder: null,
     chunks: [],
     stream: null,
+    stopOnTapHandler: null,
+    isRecording: false,
   };
 
   function uid() {
@@ -599,6 +601,21 @@
       el.musicPlayer.classList.toggle('hidden', !state.config.song.showPlayer);
     }
 
+    function setRecordingUI(active) {
+      state.isRecording = active;
+      document.body.classList.toggle('recording-mode', active);
+      if (active) {
+        if (state.stopOnTapHandler) el.feedStage.removeEventListener('pointerdown', state.stopOnTapHandler);
+        state.stopOnTapHandler = () => {
+          stopRecording();
+        };
+        el.feedStage.addEventListener('pointerdown', state.stopOnTapHandler);
+      } else if (state.stopOnTapHandler) {
+        el.feedStage.removeEventListener('pointerdown', state.stopOnTapHandler);
+        state.stopOnTapHandler = null;
+      }
+    }
+
     function setupBackground() {
       el.backgroundLayer.innerHTML = '';
       el.feedStage.style.background = state.config.background.color || '#040812';
@@ -813,14 +830,29 @@
       }
       try {
         if (document.fullscreenElement !== el.feedStage) await el.feedStage.requestFullscreen();
+
         state.stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
+            displaySurface: 'browser',
             frameRate: { ideal: 60, max: 60 },
             width: { ideal: 3840 },
             height: { ideal: 2160 },
           },
           audio: true,
+          preferCurrentTab: true,
+          selfBrowserSurface: 'include',
+          surfaceSwitching: 'exclude',
         });
+
+        const videoTrack = state.stream.getVideoTracks()[0];
+        const settings = videoTrack?.getSettings?.() || {};
+        if (settings.displaySurface && settings.displaySurface !== 'browser') {
+          state.stream.getTracks().forEach((t) => t.stop());
+          state.stream = null;
+          alert('Lütfen kayıt için yalnızca tarayıcı sekmesini seçin (pencere/ekran değil).');
+          return;
+        }
+
         state.chunks = [];
         state.mediaRecorder = new MediaRecorder(state.stream, { mimeType: 'video/webm;codecs=vp9,opus' });
         state.mediaRecorder.ondataavailable = (event) => {
@@ -831,16 +863,20 @@
           el.downloadRecord.href = URL.createObjectURL(blob);
           el.downloadRecord.classList.remove('hidden');
           el.recordBtn.textContent = '🎥 Fullscreen Kayda Başla';
+          setRecordingUI(false);
           state.stream?.getTracks().forEach((t) => t.stop());
+          state.stream = null;
           if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
           applyModeVisibility();
         };
 
         state.mediaRecorder.start();
+        setRecordingUI(true);
         el.recordBtn.textContent = '⏹ Kaydı Durdur';
         if (!state.config.song.showPlayer) el.musicPlayer.classList.add('hidden');
         if (el.audio.paused) await togglePlay();
       } catch {
+        setRecordingUI(false);
         alert('Kayıt başlatılamadı. İzinleri kontrol edin.');
       }
     }
