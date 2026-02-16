@@ -257,6 +257,9 @@
       parseLyricsBtn: document.getElementById('parseLyricsBtn'),
       applyAllEffect: document.getElementById('applyAllEffect'),
       applyAllFont: document.getElementById('applyAllFont'),
+      applyAllTextColor: document.getElementById('applyAllTextColor'),
+      applyAllOutlineColor: document.getElementById('applyAllOutlineColor'),
+      applyAllOutlineWidth: document.getElementById('applyAllOutlineWidth'),
       lyricsTable: document.getElementById('lyricsTable'),
       fontFiles: document.getElementById('fontFiles'),
       fontPreviewList: document.getElementById('fontPreviewList'),
@@ -305,6 +308,11 @@
     function renderLyrics() {
       el.applyAllEffect.innerHTML = effectOptionsWithRandom('');
       el.applyAllFont.innerHTML = `<option value="">Seçin</option>${fontOptions('', false, true)}`;
+
+      const baseStyle = state.config.lyrics[0] || { textColor: '#ffffff', outlineColor: '#000000', outlineWidth: 3 };
+      if (el.applyAllTextColor) el.applyAllTextColor.value = baseStyle.textColor || '#ffffff';
+      if (el.applyAllOutlineColor) el.applyAllOutlineColor.value = baseStyle.outlineColor || '#000000';
+      if (el.applyAllOutlineWidth) el.applyAllOutlineWidth.value = String(Number.isFinite(baseStyle.outlineWidth) ? baseStyle.outlineWidth : 3);
 
       if (!state.config.lyrics.length) {
         el.lyricsTable.innerHTML = '<p class="hint">Lyric yok. Feed yine de müzik/visualizer/arkaplan ile çalışır.</p>';
@@ -576,6 +584,22 @@
       }
       renderLyrics();
       markSaved('Tüm lyric fontları kaydedildi');
+    });
+
+    el.applyAllTextColor?.addEventListener('input', () => {
+      state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, textColor: el.applyAllTextColor.value }));
+      markSaved('Tüm lyric yazı rengi kaydedildi');
+    });
+
+    el.applyAllOutlineColor?.addEventListener('input', () => {
+      state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, outlineColor: el.applyAllOutlineColor.value }));
+      markSaved('Tüm lyric outline rengi kaydedildi');
+    });
+
+    el.applyAllOutlineWidth?.addEventListener('input', () => {
+      const width = Number(el.applyAllOutlineWidth.value) || 0;
+      state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, outlineWidth: width }));
+      markSaved('Tüm lyric outline kalınlığı kaydedildi');
     });
 
     el.fontFiles.addEventListener('change', async () => {
