@@ -122,7 +122,7 @@
         const startNum = Number(start);
         const endNum = Number(end);
         if (!Number.isFinite(startNum) || !Number.isFinite(endNum) || !text) return null;
-        return { id: uid(), start: startNum, end: endNum, text, effect: 'effect-fade', fontId: '' };
+        return { id: uid(), start: startNum, end: endNum, text, effect: 'effect-fade', fontId: '', textColor: '#ffffff', outlineColor: '#000000', outlineWidth: 3 };
       })
       .filter(Boolean)
       .sort((a, b) => a.start - b.start);
@@ -132,12 +132,26 @@
     return EFFECTS.map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`).join('');
   }
 
-  function fontOptions(selected, includeEmpty = true) {
+  function fontOptions(selected, includeEmpty = true, includeRandom = false) {
     const opts = includeEmpty ? ['<option value="">Varsayılan</option>'] : [];
+    if (includeRandom) opts.push('<option value="__random__">Random</option>');
     for (const font of state.config.fonts) {
       opts.push(`<option value="${font.id}" ${selected === font.id ? 'selected' : ''}>${font.name}</option>`);
     }
     return opts.join('');
+  }
+
+  function effectOptionsWithRandom(selected) {
+    return `<option value="">Seçin</option><option value="__random__" ${selected === '__random__' ? 'selected' : ''}>Random</option>${effectOptions(selected)}`;
+  }
+
+  function pickRandomStableByText(items, valuePicker) {
+    const byText = new Map();
+    return items.map((item) => {
+      const key = item.text.trim().toLowerCase();
+      if (!byText.has(key)) byText.set(key, valuePicker());
+      return byText.get(key);
+    });
   }
 
   function openAssetDB() {
@@ -289,8 +303,8 @@
     }
 
     function renderLyrics() {
-      el.applyAllEffect.innerHTML = `<option value="">Seçin</option>${effectOptions('')}`;
-      el.applyAllFont.innerHTML = `<option value="">Seçin</option>${fontOptions('', false)}`;
+      el.applyAllEffect.innerHTML = effectOptionsWithRandom('');
+      el.applyAllFont.innerHTML = `<option value="">Seçin</option>${fontOptions('', false, true)}`;
 
       if (!state.config.lyrics.length) {
         el.lyricsTable.innerHTML = '<p class="hint">Lyric yok. Feed yine de müzik/visualizer/arkaplan ile çalışır.</p>';
@@ -300,20 +314,35 @@
       el.lyricsTable.innerHTML = state.config.lyrics
         .map((line) => `
           <article class="lyric-item">
-            <div class="lyric-item-top">
-              <strong>[${line.start.toFixed(3)}]</strong>
-              <strong>[${line.end.toFixed(3)}]</strong>
-              <span>${line.text}</span>
-              <button type="button" data-edit-lyric="${line.id}">Edit</button>
-            </div>
-            <div class="grid two">
-              <label>Effect
-                <select data-line-effect="${line.id}">${effectOptions(line.effect || 'effect-fade')}</select>
-              </label>
-              <label>Font
-                <select data-line-font="${line.id}">${fontOptions(line.fontId || '')}</select>
-              </label>
-            </div>
+            <details>
+              <summary>
+                <strong>[${line.start.toFixed(3)}]</strong>
+                <strong>[${line.end.toFixed(3)}]</strong>
+                <span>${line.text}</span>
+              </summary>
+              <div class="lyric-edit-body">
+                <button type="button" data-edit-lyric="${line.id}">Metni Düzenle</button>
+                <div class="grid two">
+                  <label>Effect
+                    <select data-line-effect="${line.id}">${effectOptions(line.effect || 'effect-fade')}</select>
+                  </label>
+                  <label>Font
+                    <select data-line-font="${line.id}">${fontOptions(line.fontId || '')}</select>
+                  </label>
+                </div>
+                <div class="style-grid">
+                  <label>Yazı rengi
+                    <input type="color" data-line-color="${line.id}" value="${line.textColor || '#ffffff'}" />
+                  </label>
+                  <label>Outline rengi
+                    <input type="color" data-line-outline-color="${line.id}" value="${line.outlineColor || '#000000'}" />
+                  </label>
+                  <label>Outline kalınlığı (px)
+                    <input type="range" min="0" max="14" step="1" data-line-outline-width="${line.id}" value="${Number.isFinite(line.outlineWidth) ? line.outlineWidth : 3}" />
+                  </label>
+                </div>
+              </div>
+            </details>
           </article>
         `)
         .join('');
@@ -491,17 +520,60 @@
           markSaved('Lyric fontu kaydedildi');
         }
       }
+
+      const colorSel = event.target.closest('[data-line-color]');
+      if (colorSel) {
+        const row = state.config.lyrics.find((x) => x.id === colorSel.getAttribute('data-line-color'));
+        if (row) {
+          row.textColor = colorSel.value;
+          markSaved('Lyric yazı rengi kaydedildi');
+        }
+      }
+
+      const outlineColorSel = event.target.closest('[data-line-outline-color]');
+      if (outlineColorSel) {
+        const row = state.config.lyrics.find((x) => x.id === outlineColorSel.getAttribute('data-line-outline-color'));
+        if (row) {
+          row.outlineColor = outlineColorSel.value;
+          markSaved('Lyric outline rengi kaydedildi');
+        }
+      }
+
+      const outlineWidthSel = event.target.closest('[data-line-outline-width]');
+      if (outlineWidthSel) {
+        const row = state.config.lyrics.find((x) => x.id === outlineWidthSel.getAttribute('data-line-outline-width'));
+        if (row) {
+          row.outlineWidth = Number(outlineWidthSel.value) || 0;
+          markSaved('Lyric outline kalınlığı kaydedildi');
+        }
+      }
     });
 
     el.applyAllEffect.addEventListener('change', () => {
       if (!el.applyAllEffect.value) return;
-      state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, effect: el.applyAllEffect.value }));
+      if (el.applyAllEffect.value === '__random__') {
+        const effectValues = EFFECTS.map(([value]) => value);
+        const selected = pickRandomStableByText(state.config.lyrics, () => effectValues[Math.floor(Math.random() * effectValues.length)]);
+        state.config.lyrics = state.config.lyrics.map((x, idx) => ({ ...x, effect: selected[idx] }));
+      } else {
+        state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, effect: el.applyAllEffect.value }));
+      }
       renderLyrics();
       markSaved('Tüm lyric efektleri kaydedildi');
     });
 
     el.applyAllFont.addEventListener('change', () => {
-      state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, fontId: el.applyAllFont.value }));
+      if (el.applyAllFont.value === '__random__') {
+        const fontValues = state.config.fonts.map((x) => x.id);
+        if (!fontValues.length) {
+          alert('Random font için önce font yükleyin.');
+          return;
+        }
+        const selected = pickRandomStableByText(state.config.lyrics, () => fontValues[Math.floor(Math.random() * fontValues.length)]);
+        state.config.lyrics = state.config.lyrics.map((x, idx) => ({ ...x, fontId: selected[idx] }));
+      } else {
+        state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, fontId: el.applyAllFont.value }));
+      }
       renderLyrics();
       markSaved('Tüm lyric fontları kaydedildi');
     });
@@ -682,16 +754,20 @@
       ctx.clearRect(0, 0, w, h);
       if (!state.analyser) return;
       state.analyser.getByteFrequencyData(state.audioData);
-      const bars = 48;
+      const bars = 96;
       const bw = w / bars;
+      const maxBin = Math.max(8, Math.floor(state.audioData.length * 0.68));
       const center = (bars - 1) / 2;
       ctx.fillStyle = color;
       for (let i = 0; i < bars; i += 1) {
-        const idx = Math.floor((i / bars) * state.audioData.length);
+        const ratio = i / (bars - 1);
+        const idx = Math.floor(ratio * maxBin);
         const amp = state.audioData[idx] / 255;
-        const nearCenter = 1 - Math.abs(i - center) / center;
-        const bh = Math.max(3, amp * h * (0.2 + nearCenter * 0.9));
-        ctx.fillRect(i * bw + 1, (h - bh) / 2, Math.max(2, bw - 2), bh);
+        const distance = 1 - Math.abs(i - center) / center;
+        const bh = Math.max(2, amp * h * (0.24 + distance * 0.92));
+        const barThickness = Math.max(1.2, bw * 0.48);
+        const x = i * bw + (bw - barThickness) / 2;
+        ctx.fillRect(x, (h - bh) / 2, barThickness, bh);
       }
     }
 
@@ -761,6 +837,9 @@
       fitLyric(line.text, pickFont(line.fontId));
       const dur = Math.max(0.2, line.end - line.start);
       el.lyricLine.style.setProperty('--lyric-duration', `${Math.max(0.15, dur * 0.92)}s`);
+      el.lyricLine.style.setProperty('--lyric-color', line.textColor || '#ffffff');
+      el.lyricLine.style.setProperty('--lyric-outline-color', line.outlineColor || '#000000');
+      el.lyricLine.style.setProperty('--lyric-outline-width', `${Number.isFinite(line.outlineWidth) ? line.outlineWidth : 3}px`);
       el.lyricLine.className = `lyric-line ${line.effect || 'effect-fade'}`;
       state.activeLyricId = line.id;
     }
@@ -834,11 +913,12 @@
         state.stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             displaySurface: 'browser',
+            cursor: 'never',
             frameRate: { ideal: 60, max: 60 },
-            width: { ideal: 3840 },
-            height: { ideal: 2160 },
+            width: { ideal: 3840, max: 3840 },
+            height: { ideal: 2160, max: 2160 },
           },
-          audio: true,
+          audio: false,
           preferCurrentTab: true,
           selfBrowserSurface: 'include',
           surfaceSwitching: 'exclude',
@@ -854,7 +934,13 @@
         }
 
         state.chunks = [];
-        state.mediaRecorder = new MediaRecorder(state.stream, { mimeType: 'video/webm;codecs=vp9,opus' });
+        const preferredMime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? 'video/webm;codecs=vp9'
+          : 'video/webm';
+        state.mediaRecorder = new MediaRecorder(state.stream, {
+          mimeType: preferredMime,
+          videoBitsPerSecond: 80_000_000,
+        });
         state.mediaRecorder.ondataavailable = (event) => {
           if (event.data?.size) state.chunks.push(event.data);
         };
