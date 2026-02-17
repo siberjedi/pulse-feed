@@ -676,6 +676,8 @@
 
     const zones = Array.from(document.querySelectorAll('.visualizer-zone'));
 
+    el.feedStage.dataset.targetResolution = page === 'mobile' ? '2160x3840' : '3840x2160';
+
     function resizeCanvas(canvas) {
       const rect = canvas.getBoundingClientRect();
       const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
@@ -934,13 +936,18 @@
       try {
         if (document.fullscreenElement !== el.feedStage) await el.feedStage.requestFullscreen();
 
+        const isMobileStage = page === 'mobile';
+        const targetWidth = isMobileStage ? 2160 : 3840;
+        const targetHeight = isMobileStage ? 3840 : 2160;
+
         state.stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             displaySurface: 'browser',
             cursor: 'never',
             frameRate: { ideal: 60, max: 60 },
-            width: { ideal: 3840, max: 3840 },
-            height: { ideal: 2160, max: 2160 },
+            width: { ideal: targetWidth, max: targetWidth },
+            height: { ideal: targetHeight, max: targetHeight },
+            aspectRatio: { ideal: targetWidth / targetHeight },
           },
           audio: false,
           preferCurrentTab: true,
