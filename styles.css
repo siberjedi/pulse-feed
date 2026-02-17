@@ -64,8 +64,9 @@ button,
   border: 1px solid var(--line);
   background: #0c152f;
   color: var(--text);
-  padding: 10px;
+  padding: 14px;
   font: inherit;
+  font-size: 1.12rem;
 }
 
 textarea { resize: vertical; }
@@ -263,7 +264,7 @@ button, .nav-btn {
 }
 
 .lyric-line {
-  font-weight: 800;
+  font-weight: 900;
   text-shadow: 0 12px 22px rgba(0, 0, 0, 0.65);
   max-width: 100%;
   white-space: nowrap;
@@ -271,6 +272,7 @@ button, .nav-btn {
   color: var(--lyric-color, #ffffff);
   -webkit-text-stroke: var(--lyric-outline-width, 3px) var(--lyric-outline-color, #000000);
   paint-order: stroke fill;
+  font-size: 120px;
 }
 
 .music-player {
@@ -278,7 +280,7 @@ button, .nav-btn {
   left: 16px;
   bottom: 16px;
   z-index: 10;
-  width: 270px;
+  width: 420px;
   border-radius: 20px;
   border: 1px solid #29355a;
   background: rgba(6, 12, 28, 0.92);
@@ -289,16 +291,16 @@ button, .nav-btn {
 
 .mini-visualizer { border: 1px solid #243155; border-radius: 12px; overflow: hidden; height: 70px; }
 .mini-visualizer canvas { width: 100%; height: 100%; }
-.time-row { display: flex; justify-content: space-between; color: #bdc8ea; }
-.player-buttons button { width: 58px; height: 58px; border-radius: 50%; font-size: 1.3rem; }
+.time-row { display: flex; justify-content: space-between; color: #bdc8ea; font-size: 1.35rem; }
+.player-buttons button { width: 92px; height: 92px; border-radius: 50%; font-size: 2rem; }
 
 .feed-tools {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 20px;
+  right: 20px;
   z-index: 11;
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 
 .hidden { display: none !important; }
@@ -341,7 +343,7 @@ button, .nav-btn {
 @media (max-width: 900px) {
   .grid.two, .grid.three { grid-template-columns: 1fr; }
   .lyrics-zone { left: 4%; width: 92%; }
-  .music-player { width: 220px; }
+  .music-player { width: 340px; }
   .style-grid { grid-template-columns: 1fr; }
 }
 
@@ -416,15 +418,15 @@ body.recording-mode #seekBar {
 }
 
 .mobile-stage .lyrics-zone {
-  top: 23%;
+  top: 21%;
   left: 6%;
   width: 88%;
-  height: 54%;
-  padding: 0 3.5vw;
+  height: 58%;
+  padding: 0 3vw;
 }
 
 .mobile-player {
-  width: min(78%, 320px);
+  width: min(84%, 520px);
   left: 10px;
   bottom: 10px;
 }
@@ -432,7 +434,7 @@ body.recording-mode #seekBar {
 .mobile-tools {
   right: 8px;
   top: 8px;
-  max-width: 52%;
+  max-width: 58%;
   flex-direction: column;
   align-items: stretch;
 }

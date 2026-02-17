@@ -35,6 +35,7 @@
     },
     visualizer: { enabled: false, type: 'bar', color: '#5f87ff' },
     background: { mode: 'loop', color: '#040812', items: [] },
+    lyricLayout: { desktopScale: 1, mobileScale: 1.35, mobileFullWidth: false },
     lyrics: [],
     fonts: [],
   };
@@ -72,6 +73,7 @@
           ...(raw.background || {}),
           items: Array.isArray(raw.background?.items) ? raw.background.items : [],
         },
+        lyricLayout: { ...defaultConfig.lyricLayout, ...(raw.lyricLayout || {}) },
         lyrics: Array.isArray(raw.lyrics) ? raw.lyrics : [],
         fonts: Array.isArray(raw.fonts) ? raw.fonts : [],
       };
@@ -260,6 +262,9 @@
       applyAllTextColor: document.getElementById('applyAllTextColor'),
       applyAllOutlineColor: document.getElementById('applyAllOutlineColor'),
       applyAllOutlineWidth: document.getElementById('applyAllOutlineWidth'),
+      desktopLyricScale: document.getElementById('desktopLyricScale'),
+      mobileLyricScale: document.getElementById('mobileLyricScale'),
+      mobileFullWidthLyrics: document.getElementById('mobileFullWidthLyrics'),
       lyricsTable: document.getElementById('lyricsTable'),
       fontFiles: document.getElementById('fontFiles'),
       fontPreviewList: document.getElementById('fontPreviewList'),
@@ -313,6 +318,9 @@
       if (el.applyAllTextColor) el.applyAllTextColor.value = baseStyle.textColor || '#ffffff';
       if (el.applyAllOutlineColor) el.applyAllOutlineColor.value = baseStyle.outlineColor || '#000000';
       if (el.applyAllOutlineWidth) el.applyAllOutlineWidth.value = String(Number.isFinite(baseStyle.outlineWidth) ? baseStyle.outlineWidth : 3);
+      if (el.desktopLyricScale) el.desktopLyricScale.value = String(state.config.lyricLayout?.desktopScale || 1);
+      if (el.mobileLyricScale) el.mobileLyricScale.value = String(state.config.lyricLayout?.mobileScale || 1.35);
+      if (el.mobileFullWidthLyrics) el.mobileFullWidthLyrics.checked = !!state.config.lyricLayout?.mobileFullWidth;
 
       if (!state.config.lyrics.length) {
         el.lyricsTable.innerHTML = '<p class="hint">Lyric yok. Feed yine de müzik/visualizer/arkaplan ile çalışır.</p>';
@@ -602,6 +610,21 @@
       markSaved('Tüm lyric outline kalınlığı kaydedildi');
     });
 
+    el.desktopLyricScale?.addEventListener('input', () => {
+      state.config.lyricLayout.desktopScale = Number(el.desktopLyricScale.value) || 1;
+      markSaved('Desktop lyric boyutu kaydedildi');
+    });
+
+    el.mobileLyricScale?.addEventListener('input', () => {
+      state.config.lyricLayout.mobileScale = Number(el.mobileLyricScale.value) || 1.35;
+      markSaved('Mobile lyric boyutu kaydedildi');
+    });
+
+    el.mobileFullWidthLyrics?.addEventListener('change', () => {
+      state.config.lyricLayout.mobileFullWidth = el.mobileFullWidthLyrics.checked;
+      markSaved('Mobil tam genişlik lyric ayarı kaydedildi');
+    });
+
     el.fontFiles.addEventListener('change', async () => {
       const files = Array.from(el.fontFiles.files || []);
       if (!files.length) return;
@@ -709,6 +732,22 @@
       const vizEnabled = !!(state.config.visualizer.enabled && state.config.song.visualizerWithSong);
       zones.forEach((zone) => zone.classList.toggle('hidden', !vizEnabled));
       el.musicPlayer.classList.toggle('hidden', !state.config.song.showPlayer);
+    }
+
+    function applyLyricAreaLayout() {
+      const isMobile = page === 'mobile';
+      if (!isMobile) {
+        el.lyricsZone.style.left = '8%';
+        el.lyricsZone.style.width = '84%';
+        el.lyricsZone.style.top = '21%';
+        el.lyricsZone.style.height = '58%';
+        return;
+      }
+      const full = !!state.config.lyricLayout?.mobileFullWidth;
+      el.lyricsZone.style.left = full ? '2%' : '6%';
+      el.lyricsZone.style.width = full ? '96%' : '88%';
+      el.lyricsZone.style.top = '21%';
+      el.lyricsZone.style.height = '58%';
     }
 
     function setRecordingUI(active) {
@@ -860,10 +899,11 @@
     function fitLyric(text, fontFamily) {
       const zone = el.lyricsZone.getBoundingClientRect();
       const mobileMode = page === 'mobile';
-      const maxW = zone.width * (mobileMode ? 0.95 : 0.96);
-      const maxH = zone.height * (mobileMode ? 0.68 : 0.55);
-      let size = Math.min(mobileMode ? 190 : 140, Math.floor(zone.height * (mobileMode ? 0.20 : 0.18)));
-      const minSize = mobileMode ? 40 : 24;
+      const scale = mobileMode ? (state.config.lyricLayout?.mobileScale || 1.35) : (state.config.lyricLayout?.desktopScale || 1);
+      const maxW = zone.width * (mobileMode ? 0.97 : 0.96);
+      const maxH = zone.height * (mobileMode ? 0.72 : 0.58);
+      let size = Math.min(mobileMode ? 230 : 170, Math.floor(zone.height * (mobileMode ? 0.24 : 0.20)) * scale);
+      const minSize = mobileMode ? 56 : 34;
 
       el.lyricLine.style.fontFamily = fontFamily;
       el.lyricLine.style.whiteSpace = mobileMode ? 'normal' : 'nowrap';
@@ -1060,11 +1100,15 @@
 
     applyStageScale();
     applyModeVisibility();
+    applyLyricAreaLayout();
     setupBackground();
     setupAudio();
     lyricLoop();
 
-    window.addEventListener('resize', applyStageScale);
+    window.addEventListener('resize', () => {
+      applyStageScale();
+      applyLyricAreaLayout();
+    });
   }
 
   async function init() {
