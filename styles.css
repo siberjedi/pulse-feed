@@ -379,15 +379,11 @@ body.recording-mode #seekBar {
 }
 
 .desktop-stage {
-  width: min(100vw - 20px, calc((100vh - 20px) * 16 / 9));
-  height: min(100vh - 20px, calc((100vw - 20px) * 9 / 16));
-  min-width: 960px;
+  width: 3840px;
+  height: 2160px;
   border-radius: 16px;
   border: 1px solid #243055;
-}
-
-@media (max-width: 980px) {
-  .desktop-stage { min-width: 0; }
+  transform-origin: top left;
 }
 
 .mobile-page {
@@ -411,12 +407,12 @@ body.recording-mode #seekBar {
 }
 
 .mobile-stage {
-  width: min(100vw - 20px, calc((100vh - 20px) * 9 / 16));
-  height: min(100vh - 20px, calc((100vw - 20px) * 16 / 9));
-  min-height: 0;
-  max-height: 100vh;
+  width: 2160px;
+  height: 3840px;
+  max-height: none;
   border-radius: 16px;
   border: 1px solid #243055;
+  transform-origin: top left;
 }
 
 .mobile-stage .lyrics-zone {
@@ -448,4 +444,15 @@ body.recording-mode #seekBar {
 
 @media (max-height: 760px) {
   .mobile-stage { min-height: 0; }
+}
+
+.scaled-stage {
+  transform: scale(var(--stage-scale, 1));
+}
+
+.mobile-stage .lyric-line {
+  white-space: normal;
+  line-height: 1.12;
+  max-width: 96%;
+  text-align: center;
 }

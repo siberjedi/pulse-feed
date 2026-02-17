@@ -676,7 +676,19 @@
 
     const zones = Array.from(document.querySelectorAll('.visualizer-zone'));
 
-    el.feedStage.dataset.targetResolution = page === 'mobile' ? '2160x3840' : '3840x2160';
+    const targetStageSize = page === 'mobile' ? { width: 2160, height: 3840 } : { width: 3840, height: 2160 };
+    el.feedStage.dataset.targetResolution = `${targetStageSize.width}x${targetStageSize.height}`;
+
+    function applyStageScale() {
+      const shell = el.feedStage.parentElement;
+      const vw = window.innerWidth - 20;
+      const vh = window.innerHeight - 20;
+      const scale = Math.max(0.05, Math.min(vw / targetStageSize.width, vh / targetStageSize.height));
+      el.feedStage.classList.add('scaled-stage');
+      el.feedStage.style.setProperty('--stage-scale', String(scale));
+      shell.style.width = `${Math.floor(targetStageSize.width * scale)}px`;
+      shell.style.height = `${Math.floor(targetStageSize.height * scale)}px`;
+    }
 
     function resizeCanvas(canvas) {
       const rect = canvas.getBoundingClientRect();
@@ -847,13 +859,19 @@
 
     function fitLyric(text, fontFamily) {
       const zone = el.lyricsZone.getBoundingClientRect();
-      const maxW = zone.width * 0.96;
-      const maxH = zone.height * 0.55;
-      let size = Math.min(140, Math.floor(zone.height * 0.18));
+      const mobileMode = page === 'mobile';
+      const maxW = zone.width * (mobileMode ? 0.95 : 0.96);
+      const maxH = zone.height * (mobileMode ? 0.68 : 0.55);
+      let size = Math.min(mobileMode ? 190 : 140, Math.floor(zone.height * (mobileMode ? 0.20 : 0.18)));
+      const minSize = mobileMode ? 40 : 24;
+
       el.lyricLine.style.fontFamily = fontFamily;
+      el.lyricLine.style.whiteSpace = mobileMode ? 'normal' : 'nowrap';
+      el.lyricLine.style.textAlign = 'center';
       el.lyricLine.textContent = text;
       el.lyricLine.style.fontSize = `${size}px`;
-      while ((el.lyricLine.scrollWidth > maxW || el.lyricLine.scrollHeight > maxH) && size > 24) {
+
+      while ((el.lyricLine.scrollWidth > maxW || el.lyricLine.scrollHeight > maxH) && size > minSize) {
         size -= 2;
         el.lyricLine.style.fontSize = `${size}px`;
       }
@@ -936,9 +954,8 @@
       try {
         if (document.fullscreenElement !== el.feedStage) await el.feedStage.requestFullscreen();
 
-        const isMobileStage = page === 'mobile';
-        const targetWidth = isMobileStage ? 2160 : 3840;
-        const targetHeight = isMobileStage ? 3840 : 2160;
+        const targetWidth = targetStageSize.width;
+        const targetHeight = targetStageSize.height;
 
         state.stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
@@ -961,6 +978,24 @@
           state.stream.getTracks().forEach((t) => t.stop());
           state.stream = null;
           alert('Lütfen kayıt için yalnızca tarayıcı sekmesini seçin (pencere/ekran değil).');
+          return;
+        }
+
+        try {
+          await videoTrack.applyConstraints({
+            width: { exact: targetWidth },
+            height: { exact: targetHeight },
+            frameRate: { ideal: 60, max: 60 },
+          });
+        } catch {
+          // browser may reject exact constraints depending on capture source
+        }
+
+        const finalSettings = videoTrack?.getSettings?.() || {};
+        if ((finalSettings.width && finalSettings.width !== targetWidth) || (finalSettings.height && finalSettings.height !== targetHeight)) {
+          state.stream.getTracks().forEach((t) => t.stop());
+          state.stream = null;
+          alert(`Kayıt çözünürlüğü tam ${targetWidth}x${targetHeight} olmalı. Lütfen sekme paylaşımında çözünürlük seçimini kontrol edin.`);
           return;
         }
 
@@ -1023,10 +1058,13 @@
       else startRecording();
     });
 
+    applyStageScale();
     applyModeVisibility();
     setupBackground();
     setupAudio();
     lyricLoop();
+
+    window.addEventListener('resize', applyStageScale);
   }
 
   async function init() {
