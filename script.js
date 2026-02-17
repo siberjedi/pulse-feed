@@ -1025,7 +1025,7 @@
   async function init() {
     await hydrateAssetUrls();
     if (page === 'admin') bindAdmin();
-    if (page === 'feed') bindFeed();
+    if (page === 'feed' || page === 'mobile') bindFeed();
   }
 
   init();
