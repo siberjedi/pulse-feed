@@ -1,463 +1,1122 @@
 (() => {
-  const POSTS_KEY = 'pulseFeedPosts.v4';
-  const SUGGESTIONS_KEY = 'pulseSuggestions.v1';
+  const STORAGE_KEY = 'pulse.lyricVideoConfig.v2';
+  const ASSET_DB = 'pulseLyricAssets';
+  const ASSET_STORE = 'files';
 
-  const page = document.body.dataset.page || 'admin';
+  const EFFECTS = [
+    ['effect-fade', 'Fade In / Fade Out'],
+    ['effect-slide-up', 'Slide Up'],
+    ['effect-slide-left', 'Slide From Left'],
+    ['effect-blur', 'Blur’dan Netleşme'],
+    ['effect-opacity-pulse', 'Opacity Pulse'],
+    ['effect-glitch', 'Glitch Effect'],
+    ['effect-shake', 'Shake / Impact'],
+    ['effect-letter-stagger', 'Letter Stagger'],
+    ['effect-distortion-flash', 'Distortion Flash'],
+    ['effect-typewriter', 'Typewriter Effect'],
+    ['effect-mask-reveal', 'Mask Reveal'],
+    ['effect-scale-impact', 'Scale Impact'],
+    ['effect-word-highlighting', 'Word Highlighting'],
+    ['effect-audio-reactive', 'Audio Reactive Text'],
+    ['effect-3d-perspective', '3D Perspective Text'],
+    ['effect-particle-text', 'Particle Text'],
+  ];
 
-  const state = {
-    posts: [],
-    suggestions: [],
-    autoScroll: true,
-    pauseAtPosts: true,
-    speedPxPerSecond: 34,
-    isPaused: false,
-    pauseUntil: 0,
-    lastTime: performance.now(),
-    loopResetPending: false,
+  const defaultConfig = {
+    song: {
+      title: '',
+      fileName: '',
+      size: 0,
+      mimeType: '',
+      assetKey: '',
+      objectUrl: '',
+      showPlayer: true,
+      visualizerWithSong: false,
+    },
+    visualizer: { enabled: false, type: 'bar', color: '#5f87ff' },
+    background: { mode: 'loop', color: '#040812', items: [] },
+    lyricLayout: { desktopScale: 1, mobileScale: 1.35, mobileFullWidth: false },
+    lyrics: [],
+    fonts: [],
   };
 
-  const el = {
-    form: document.getElementById('composerForm'),
-    postText: document.getElementById('postText'),
-    postType: document.getElementById('postType'),
-    parentPostSelect: document.getElementById('parentPostSelect'),
-    mediaFile: document.getElementById('mediaFile'),
-    isSponsored: document.getElementById('isSponsored'),
-    authorHandle: document.getElementById('authorHandle'),
-    authorSubMeta: document.getElementById('authorSubMeta'),
-    feed: document.getElementById('feed'),
-    manageList: document.getElementById('manageList'),
-    suggestionForm: document.getElementById('suggestionForm'),
-    suggestionHandle: document.getElementById('suggestionHandle'),
-    suggestionBio: document.getElementById('suggestionBio'),
-    suggestionManageList: document.getElementById('suggestionManageList'),
-    suggestionsList: document.getElementById('suggestionsList'),
-    searchInput: document.getElementById('searchInput'),
-    autoScrollEnabled: document.getElementById('autoScrollEnabled'),
-    scrollSpeed: document.getElementById('scrollSpeed'),
-    pauseAtPosts: document.getElementById('pauseAtPosts'),
+  const page = document.body.dataset.page;
+  const state = {
+    config: loadConfig(),
+    audioCtx: null,
+    analyser: null,
+    audioData: new Uint8Array(256),
+    activeLyricId: null,
+    visualizerRaf: 0,
+    mediaRecorder: null,
+    chunks: [],
+    stream: null,
+    stopOnTapHandler: null,
+    isRecording: false,
   };
 
   function uid() {
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   }
 
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function formatTextWithMentions(text) {
-    const safe = escapeHtml(text);
-    return safe.replace(/(^|\s)(@[a-zA-Z0-9_.-]+)/g, '$1<span class="mention">$2</span>');
-  }
-
-  function timeAgo(ts) {
-    const diffMin = Math.max(1, Math.floor((Date.now() - ts) / 60000));
-    if (diffMin < 60) return `${diffMin}m`;
-    const h = Math.floor(diffMin / 60);
-    if (h < 24) return `${h}h`;
-    return `${Math.floor(h / 24)}d`;
-  }
-
-  function avatarFor(author) {
-    const seed = encodeURIComponent(String(author).replace('@', ''));
-    return `https://api.dicebear.com/9.x/thumbs/svg?seed=${seed}`;
-  }
-
-  function seedPosts() {
-    const now = Date.now();
-    const p1 = uid();
-    const p2 = uid();
-    return [
-      {
-        id: p1,
-        type: 'post',
-        author: '@nova.wave',
-        subMeta: 'visual rehearsal',
-        text: 'Yeni editte @mono.synth ile ortak deneme yaptık. Gece çekimi için hazır.',
-        sponsored: false,
-        media: '',
-        createdAt: now - 1000 * 60 * 12,
-        pauseMs: 2400,
-        parentId: null,
-      },
-      {
-        id: p2,
-        type: 'post',
-        author: '@arc.light',
-        subMeta: 'loop tools',
-        text: 'Bu bir tanıtım gönderisidir. @studio.pulse için yeni görsel paket çıktı.',
-        sponsored: true,
-        media: '',
-        createdAt: now - 1000 * 60 * 10,
-        pauseMs: 2800,
-        parentId: null,
-      },
-      {
-        id: uid(),
-        type: 'comment',
-        author: '@grainframe',
-        subMeta: 'studio notes',
-        text: '@nova.wave palet çok iyi duruyor.',
-        sponsored: false,
-        media: '',
-        createdAt: now - 1000 * 60 * 8,
-        pauseMs: 0,
-        parentId: p1,
-      },
-    ];
-  }
-
-  function seedSuggestions() {
-    return [
-      { id: uid(), handle: '@blue.artist', bio: 'visual performer' },
-      { id: uid(), handle: '@ghost.user', bio: 'night cuts' },
-      { id: uid(), handle: '@mono.synth', bio: 'audio textures' },
-    ];
-  }
-
-  function loadData() {
+  function loadConfig() {
     try {
-      state.posts = JSON.parse(localStorage.getItem(POSTS_KEY) || 'null') || seedPosts();
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      if (!raw) return structuredClone(defaultConfig);
+      return {
+        ...structuredClone(defaultConfig),
+        ...raw,
+        song: { ...defaultConfig.song, ...(raw.song || {}) },
+        visualizer: { ...defaultConfig.visualizer, ...(raw.visualizer || {}) },
+        background: {
+          ...defaultConfig.background,
+          ...(raw.background || {}),
+          items: Array.isArray(raw.background?.items) ? raw.background.items : [],
+        },
+        lyricLayout: { ...defaultConfig.lyricLayout, ...(raw.lyricLayout || {}) },
+        lyrics: Array.isArray(raw.lyrics) ? raw.lyrics : [],
+        fonts: Array.isArray(raw.fonts) ? raw.fonts : [],
+      };
     } catch {
-      state.posts = seedPosts();
+      return structuredClone(defaultConfig);
     }
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
+  }
 
-    try {
-      state.suggestions = JSON.parse(localStorage.getItem(SUGGESTIONS_KEY) || 'null') || seedSuggestions();
-    } catch {
-      state.suggestions = seedSuggestions();
+  function persistableConfig() {
+    const clone = structuredClone(state.config);
+    if (clone.song) clone.song.objectUrl = '';
+    clone.background.items = clone.background.items.map((x) => ({ ...x, objectUrl: '' }));
+    clone.fonts = clone.fonts.map((x) => ({ ...x, objectUrl: '' }));
+    return clone;
+  }
+
+  function saveConfig() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableConfig()));
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes) return '0 KB';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = bytes;
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) {
+      value /= 1024;
+      i += 1;
     }
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
+    return `${value.toFixed(1)} ${units[i]}`;
   }
 
-  function persistPosts() {
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
+  function timeLabel(s) {
+    if (!Number.isFinite(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, '0')}`;
   }
 
-  function persistSuggestions() {
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
-  }
-
-  function getPosts() {
-    return state.posts.filter((x) => x.type === 'post').sort((a, b) => a.createdAt - b.createdAt);
-  }
-
-  function getCommentsFor(postId) {
-    return state.posts.filter((x) => x.type === 'comment' && x.parentId === postId).sort((a, b) => a.createdAt - b.createdAt);
-  }
-
-  function renderParentOptions() {
-    if (!el.parentPostSelect) return;
-    const options = ['<option value="">None</option>'];
-    for (const post of getPosts()) {
-      const text = escapeHtml(post.text.slice(0, 40));
-      options.push(`<option value="${post.id}">${escapeHtml(post.author)} — ${text}${post.text.length > 40 ? '…' : ''}</option>`);
-    }
-    el.parentPostSelect.innerHTML = options.join('');
-  }
-
-  function renderFeed() {
-    if (!el.feed) return;
-    const posts = getPosts();
-    if (!posts.length) {
-      el.feed.innerHTML = '<div class="empty-feed">No posts yet.</div>';
-      return;
-    }
-
-    el.feed.innerHTML = posts
-      .map((post) => {
-        const comments = getCommentsFor(post.id);
-        const media = post.media ? `<div class="media-wrap"><img class="media" src="${post.media}" alt="Attached media" /></div>` : '';
-        const commentsHtml = comments.length
-          ? `<section class="comments">${comments
-              .map((c) => `<p class="comment"><strong>${escapeHtml(c.author)}</strong> · <span class="timestamp">${timeAgo(c.createdAt)}</span><br>${formatTextWithMentions(c.text)}</p>`)
-              .join('')}</section>`
-          : '<section class="comments"></section>';
-
-        return `<article class="post-card" data-pause="${post.pauseMs || 0}">
-          <header class="post-head">
-            <img class="avatar" src="${avatarFor(post.author)}" alt="${escapeHtml(post.author)} avatar" />
-            <div>
-              <p class="meta-row"><span class="username">${escapeHtml(post.author)}</span> <span class="timestamp">· ${timeAgo(post.createdAt)}</span></p>
-              <p class="sub-meta">${escapeHtml(post.subMeta || 'music video drafts')}</p>
-            </div>
-            ${post.sponsored ? '<span class="sponsored-label">Sponsored</span>' : ''}
-          </header>
-          <p class="post-text">${formatTextWithMentions(post.text)}</p>
-          ${media}
-          <footer class="post-actions" aria-hidden="true">
-            <span>♡ ${Math.floor(Math.random() * 900 + 25)}</span>
-            <span>💬 ${comments.length}</span>
-            <span>↺ ${Math.floor(Math.random() * 70 + 3)}</span>
-          </footer>
-          ${commentsHtml}
-        </article>`;
+  function parseLyrics(raw) {
+    return raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [start, end, ...textParts] = line.split('|');
+        const text = textParts.join('|').trim();
+        const startNum = Number(start);
+        const endNum = Number(end);
+        if (!Number.isFinite(startNum) || !Number.isFinite(endNum) || !text) return null;
+        return { id: uid(), start: startNum, end: endNum, text, effect: 'effect-fade', fontId: '', textColor: '#ffffff', outlineColor: '#000000', outlineWidth: 3 };
       })
-      .join('');
+      .filter(Boolean)
+      .sort((a, b) => a.start - b.start);
   }
 
-  function renderManageList() {
-    if (!el.manageList) return;
-    const sorted = [...state.posts].sort((a, b) => b.createdAt - a.createdAt);
-    el.manageList.innerHTML = sorted
-      .map((item) => `<div class="manage-item">
-        <div>
-          <p><strong>${escapeHtml(item.author)}</strong> · <span>${item.type.toUpperCase()}</span> · <small>${timeAgo(item.createdAt)}</small></p>
-          <small>${escapeHtml(item.text.slice(0, 80))}${item.text.length > 80 ? '…' : ''}</small>
-        </div>
-        <button class="delete-btn" type="button" data-delete-post-id="${item.id}">Delete</button>
-      </div>`)
-      .join('');
+  function effectOptions(selected) {
+    return EFFECTS.map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`).join('');
   }
 
-  function renderSuggestions() {
-    if (!el.suggestionsList) return;
-    const query = (el.searchInput?.value || '').trim().toLowerCase();
-    const list = state.suggestions.filter((s) =>
-      !query || s.handle.toLowerCase().includes(query) || s.bio.toLowerCase().includes(query)
-    );
-
-    el.suggestionsList.innerHTML = list
-      .map((s) => `<article class="suggestion-item">
-        <img src="${avatarFor(s.handle)}" alt="${escapeHtml(s.handle)} avatar" class="avatar mini" />
-        <div>
-          <p><strong>${escapeHtml(s.handle)}</strong></p>
-          <small>${escapeHtml(s.bio)}</small>
-        </div>
-        <button type="button">Takip et</button>
-      </article>`)
-      .join('');
+  function fontOptions(selected, includeEmpty = true, includeRandom = false) {
+    const opts = includeEmpty ? ['<option value="">Varsayılan</option>'] : [];
+    if (includeRandom) opts.push('<option value="__random__">Random</option>');
+    for (const font of state.config.fonts) {
+      opts.push(`<option value="${font.id}" ${selected === font.id ? 'selected' : ''}>${font.name}</option>`);
+    }
+    return opts.join('');
   }
 
-  function renderSuggestionManager() {
-    if (!el.suggestionManageList) return;
-    el.suggestionManageList.innerHTML = state.suggestions
-      .map((s) => `<div class="manage-item">
-        <div>
-          <p><strong>${escapeHtml(s.handle)}</strong></p>
-          <small>${escapeHtml(s.bio)}</small>
-        </div>
-        <button class="delete-btn" type="button" data-delete-suggestion-id="${s.id}">Delete</button>
-      </div>`)
-      .join('');
+  function effectOptionsWithRandom(selected) {
+    return `<option value="">Seçin</option><option value="__random__" ${selected === '__random__' ? 'selected' : ''}>Random</option>${effectOptions(selected)}`;
   }
 
-  function refresh() {
-    renderParentOptions();
-    renderFeed();
-    renderManageList();
-    renderSuggestions();
-    renderSuggestionManager();
+  function pickRandomStableByText(items, valuePicker) {
+    const byText = new Map();
+    return items.map((item) => {
+      const key = item.text.trim().toLowerCase();
+      if (!byText.has(key)) byText.set(key, valuePicker());
+      return byText.get(key);
+    });
   }
 
-  function toDataUrl(file) {
+  function openAssetDB() {
     return new Promise((resolve, reject) => {
-      if (!file) {
-        resolve('');
+      const req = indexedDB.open(ASSET_DB, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(ASSET_STORE)) db.createObjectStore(ASSET_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function assetPut(key, blob) {
+    const db = await openAssetDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(ASSET_STORE, 'readwrite');
+      tx.objectStore(ASSET_STORE).put(blob, key);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+
+  async function assetGet(key) {
+    const db = await openAssetDB();
+    const result = await new Promise((resolve, reject) => {
+      const tx = db.transaction(ASSET_STORE, 'readonly');
+      const req = tx.objectStore(ASSET_STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return result;
+  }
+
+  async function assetDelete(key) {
+    if (!key) return;
+    const db = await openAssetDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(ASSET_STORE, 'readwrite');
+      tx.objectStore(ASSET_STORE).delete(key);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+
+  function revokeObjectUrl(url) {
+    if (!url) return;
+    URL.revokeObjectURL(url);
+  }
+
+  async function hydrateAssetUrls() {
+    if (state.config.song.assetKey) {
+      const blob = await assetGet(state.config.song.assetKey);
+      state.config.song.objectUrl = blob ? URL.createObjectURL(blob) : '';
+    }
+
+    for (const item of state.config.background.items) {
+      if (!item.assetKey) continue;
+      const blob = await assetGet(item.assetKey);
+      item.objectUrl = blob ? URL.createObjectURL(blob) : '';
+    }
+
+    for (const font of state.config.fonts) {
+      if (!font.assetKey) continue;
+      const blob = await assetGet(font.assetKey);
+      font.objectUrl = blob ? URL.createObjectURL(blob) : '';
+    }
+  }
+
+  function mountFontFaces() {
+    let styleEl = document.getElementById('dynamicFontFaces');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'dynamicFontFaces';
+      document.head.appendChild(styleEl);
+    }
+
+    styleEl.textContent = state.config.fonts
+      .filter((font) => font.objectUrl)
+      .map((font) => `@font-face { font-family: '${font.family}'; src: url('${font.objectUrl}'); font-display: swap; }`)
+      .join('\n');
+  }
+
+  function bindAdmin() {
+    const el = {
+      songFile: document.getElementById('songFile'),
+      songTitle: document.getElementById('songTitle'),
+      showPlayerToggle: document.getElementById('showPlayerToggle'),
+      visualizerWithSongToggle: document.getElementById('visualizerWithSongToggle'),
+      songInfo: document.getElementById('songInfo'),
+      visualizerEnabled: document.getElementById('visualizerEnabled'),
+      visualizerType: document.getElementById('visualizerType'),
+      visualizerColor: document.getElementById('visualizerColor'),
+      backgroundFiles: document.getElementById('backgroundFiles'),
+      backgroundMode: document.getElementById('backgroundMode'),
+      backgroundColor: document.getElementById('backgroundColor'),
+      backgroundList: document.getElementById('backgroundList'),
+      lyricsInput: document.getElementById('lyricsInput'),
+      parseLyricsBtn: document.getElementById('parseLyricsBtn'),
+      applyAllEffect: document.getElementById('applyAllEffect'),
+      applyAllFont: document.getElementById('applyAllFont'),
+      applyAllTextColor: document.getElementById('applyAllTextColor'),
+      applyAllOutlineColor: document.getElementById('applyAllOutlineColor'),
+      applyAllOutlineWidth: document.getElementById('applyAllOutlineWidth'),
+      desktopLyricScale: document.getElementById('desktopLyricScale'),
+      mobileLyricScale: document.getElementById('mobileLyricScale'),
+      mobileFullWidthLyrics: document.getElementById('mobileFullWidthLyrics'),
+      lyricsTable: document.getElementById('lyricsTable'),
+      fontFiles: document.getElementById('fontFiles'),
+      fontPreviewList: document.getElementById('fontPreviewList'),
+      saveAllBtn: document.getElementById('saveAllBtn'),
+      saveStatus: document.getElementById('saveStatus'),
+    };
+
+    function markSaved(message) {
+      saveConfig();
+      el.saveStatus.textContent = `${message} • ${new Date().toLocaleTimeString('tr-TR')}`;
+      clearTimeout(markSaved.timer);
+      markSaved.timer = window.setTimeout(() => {
+        el.saveStatus.textContent = '';
+      }, 1700);
+    }
+
+    function renderSong() {
+      const song = state.config.song;
+      el.songTitle.value = song.title || '';
+      el.showPlayerToggle.checked = !!song.showPlayer;
+      el.visualizerWithSongToggle.checked = !!song.visualizerWithSong;
+      el.songInfo.textContent = song.assetKey
+        ? `${song.fileName || 'Şarkı'} yüklü • ${formatBytes(song.size)} • bağımsız kaydedildi`
+        : 'Henüz şarkı yüklenmedi.';
+    }
+
+    function renderVisualizer() {
+      el.visualizerEnabled.checked = !!state.config.visualizer.enabled;
+      el.visualizerType.value = state.config.visualizer.type;
+      el.visualizerColor.value = state.config.visualizer.color;
+    }
+
+    function renderBackground() {
+      el.backgroundMode.value = state.config.background.mode;
+      el.backgroundColor.value = state.config.background.color;
+      if (!state.config.background.items.length) {
+        el.backgroundList.innerHTML = '<span class="hint">Video/GIF eklenmedi. Yalnızca arkaplan rengi kullanılacak.</span>';
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
 
-  async function onPublish(event) {
-    event.preventDefault();
-    const text = el.postText.value.trim();
-    if (!text) return;
-
-    const type = el.postType.value;
-    const parentId = type === 'comment' ? el.parentPostSelect.value || null : null;
-    if (type === 'comment' && !parentId) {
-      alert('Please select a parent post for comments.');
-      return;
+      el.backgroundList.innerHTML = state.config.background.items
+        .map((item, idx) => `<div class="manage-row">${idx + 1}. ${item.fileName} (${item.kind}) <button type="button" data-remove-bg="${item.id}">Sil</button></div>`)
+        .join('');
     }
 
-    const media = await toDataUrl(el.mediaFile.files?.[0] || null);
+    function renderLyrics() {
+      el.applyAllEffect.innerHTML = effectOptionsWithRandom('');
+      el.applyAllFont.innerHTML = `<option value="">Seçin</option>${fontOptions('', false, true)}`;
 
-    state.posts.push({
-      id: uid(),
-      type,
-      author: (el.authorHandle.value.trim() || '@studio.pulse').replace(/\s+/g, ''),
-      subMeta: el.authorSubMeta.value.trim() || 'music video draft',
-      text,
-      sponsored: Boolean(el.isSponsored.checked),
-      media,
-      createdAt: Date.now(),
-      pauseMs: type === 'post' ? 2200 : 0,
-      parentId,
-    });
+      const baseStyle = state.config.lyrics[0] || { textColor: '#ffffff', outlineColor: '#000000', outlineWidth: 3 };
+      if (el.applyAllTextColor) el.applyAllTextColor.value = baseStyle.textColor || '#ffffff';
+      if (el.applyAllOutlineColor) el.applyAllOutlineColor.value = baseStyle.outlineColor || '#000000';
+      if (el.applyAllOutlineWidth) el.applyAllOutlineWidth.value = String(Number.isFinite(baseStyle.outlineWidth) ? baseStyle.outlineWidth : 3);
+      if (el.desktopLyricScale) el.desktopLyricScale.value = String(state.config.lyricLayout?.desktopScale || 1);
+      if (el.mobileLyricScale) el.mobileLyricScale.value = String(state.config.lyricLayout?.mobileScale || 1.35);
+      if (el.mobileFullWidthLyrics) el.mobileFullWidthLyrics.checked = !!state.config.lyricLayout?.mobileFullWidth;
 
-    persistPosts();
-    refresh();
+      if (!state.config.lyrics.length) {
+        el.lyricsTable.innerHTML = '<p class="hint">Lyric yok. Feed yine de müzik/visualizer/arkaplan ile çalışır.</p>';
+        return;
+      }
 
-    el.form.reset();
-    el.authorHandle.value = '@studio.pulse';
-    el.authorSubMeta.value = 'music video draft';
-  }
-
-  function deletePostOrComment(id) {
-    const item = state.posts.find((x) => x.id === id);
-    if (!item) return;
-
-    if (item.type === 'post') {
-      state.posts = state.posts.filter((x) => x.id !== id && x.parentId !== id);
-    } else {
-      state.posts = state.posts.filter((x) => x.id !== id);
+      el.lyricsTable.innerHTML = state.config.lyrics
+        .map((line) => `
+          <article class="lyric-item">
+            <details>
+              <summary>
+                <strong>[${line.start.toFixed(3)}]</strong>
+                <strong>[${line.end.toFixed(3)}]</strong>
+                <span>${line.text}</span>
+              </summary>
+              <div class="lyric-edit-body">
+                <button type="button" data-edit-lyric="${line.id}">Metni Düzenle</button>
+                <div class="grid two">
+                  <label>Effect
+                    <select data-line-effect="${line.id}">${effectOptions(line.effect || 'effect-fade')}</select>
+                  </label>
+                  <label>Font
+                    <select data-line-font="${line.id}">${fontOptions(line.fontId || '')}</select>
+                  </label>
+                </div>
+                <div class="style-grid">
+                  <label>Yazı rengi
+                    <input type="color" data-line-color="${line.id}" value="${line.textColor || '#ffffff'}" />
+                  </label>
+                  <label>Outline rengi
+                    <input type="color" data-line-outline-color="${line.id}" value="${line.outlineColor || '#000000'}" />
+                  </label>
+                  <label>Outline kalınlığı (px)
+                    <input type="range" min="0" max="14" step="1" data-line-outline-width="${line.id}" value="${Number.isFinite(line.outlineWidth) ? line.outlineWidth : 3}" />
+                  </label>
+                </div>
+              </div>
+            </details>
+          </article>
+        `)
+        .join('');
     }
 
-    persistPosts();
-    refresh();
+    function renderFonts() {
+      if (!state.config.fonts.length) {
+        el.fontPreviewList.innerHTML = '<p class="hint">Henüz font yüklenmedi.</p>';
+        return;
+      }
+
+      el.fontPreviewList.innerHTML = state.config.fonts
+        .map((font) => `
+          <article class="font-card">
+            <strong>${font.name}</strong>
+            <div class="font-sample" style="font-family:'${font.family}'">Pulse Feed Lyric Preview</div>
+            <button type="button" data-remove-font="${font.id}">Kaldır</button>
+          </article>
+        `)
+        .join('');
+    }
+
+    function renderAll() {
+      mountFontFaces();
+      renderSong();
+      renderVisualizer();
+      renderBackground();
+      renderLyrics();
+      renderFonts();
+    }
+
+    el.songFile.addEventListener('change', async () => {
+      const file = el.songFile.files?.[0];
+      if (!file) return;
+      if (!(/\.mp3$|\.wav$/i).test(file.name)) {
+        alert('Sadece .mp3 ve .wav desteklenir.');
+        el.songFile.value = '';
+        return;
+      }
+
+      const key = `song-${uid()}`;
+      await assetPut(key, file);
+      await assetDelete(state.config.song.assetKey);
+      revokeObjectUrl(state.config.song.objectUrl);
+
+      state.config.song = {
+        ...state.config.song,
+        fileName: file.name,
+        size: file.size,
+        mimeType: file.type,
+        assetKey: key,
+        objectUrl: URL.createObjectURL(file),
+      };
+
+      renderSong();
+      markSaved('Şarkı yüklendi ve kaydedildi');
+    });
+
+    el.songTitle.addEventListener('input', () => {
+      state.config.song.title = el.songTitle.value.trim();
+      markSaved('Şarkı adı kaydedildi');
+    });
+
+    el.showPlayerToggle.addEventListener('change', () => {
+      state.config.song.showPlayer = el.showPlayerToggle.checked;
+      markSaved('Player tercihi kaydedildi');
+    });
+
+    el.visualizerWithSongToggle.addEventListener('change', () => {
+      state.config.song.visualizerWithSong = el.visualizerWithSongToggle.checked;
+      markSaved('Visualizer bağlantısı kaydedildi');
+    });
+
+    el.visualizerEnabled.addEventListener('change', () => {
+      state.config.visualizer.enabled = el.visualizerEnabled.checked;
+      markSaved('Visualizer ayarı kaydedildi');
+    });
+
+    el.visualizerType.addEventListener('change', () => {
+      state.config.visualizer.type = el.visualizerType.value;
+      markSaved('Visualizer türü kaydedildi');
+    });
+
+    el.visualizerColor.addEventListener('input', () => {
+      state.config.visualizer.color = el.visualizerColor.value;
+      markSaved('Visualizer rengi kaydedildi');
+    });
+
+    el.backgroundMode.addEventListener('change', () => {
+      state.config.background.mode = el.backgroundMode.value;
+      renderBackground();
+      markSaved('Arkaplan modu kaydedildi');
+    });
+
+    el.backgroundColor.addEventListener('input', () => {
+      state.config.background.color = el.backgroundColor.value;
+      markSaved('Arkaplan rengi kaydedildi');
+    });
+
+    el.backgroundFiles.addEventListener('change', async () => {
+      const files = Array.from(el.backgroundFiles.files || []);
+      if (!files.length) return;
+
+      for (const file of files) {
+        if (!(/\.(gif|mp4|mkv|webm)$/i).test(file.name)) continue;
+        const key = `bg-${uid()}`;
+        await assetPut(key, file);
+        state.config.background.items.push({
+          id: uid(),
+          fileName: file.name,
+          kind: /\.gif$/i.test(file.name) ? 'gif' : 'video',
+          mimeType: file.type,
+          assetKey: key,
+          objectUrl: URL.createObjectURL(file),
+        });
+      }
+
+      renderBackground();
+      markSaved('Arkaplan dosyaları kaydedildi');
+    });
+
+    el.backgroundList.addEventListener('click', async (event) => {
+      const btn = event.target.closest('[data-remove-bg]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-remove-bg');
+      const item = state.config.background.items.find((x) => x.id === id);
+      if (item) {
+        await assetDelete(item.assetKey);
+        revokeObjectUrl(item.objectUrl);
+      }
+      state.config.background.items = state.config.background.items.filter((x) => x.id !== id);
+      renderBackground();
+      markSaved('Arkaplan öğesi silindi');
+    });
+
+    el.parseLyricsBtn.addEventListener('click', () => {
+      const parsed = parseLyrics(el.lyricsInput.value);
+      if (!parsed.length) {
+        alert('Geçerli lyric satırı bulunamadı.');
+        return;
+      }
+      state.config.lyrics = parsed;
+      renderLyrics();
+      markSaved('Lyrics kaydedildi');
+    });
+
+    el.lyricsTable.addEventListener('click', (event) => {
+      const editBtn = event.target.closest('[data-edit-lyric]');
+      if (!editBtn) return;
+      const id = editBtn.getAttribute('data-edit-lyric');
+      const row = state.config.lyrics.find((x) => x.id === id);
+      if (!row) return;
+      const next = window.prompt('Yeni lyric', row.text);
+      if (next === null) return;
+      row.text = next.trim() || row.text;
+      renderLyrics();
+      markSaved('Lyric güncellendi');
+    });
+
+    el.lyricsTable.addEventListener('change', (event) => {
+      const eff = event.target.closest('[data-line-effect]');
+      if (eff) {
+        const row = state.config.lyrics.find((x) => x.id === eff.getAttribute('data-line-effect'));
+        if (row) {
+          row.effect = eff.value;
+          markSaved('Lyric efekti kaydedildi');
+        }
+      }
+
+      const fontSel = event.target.closest('[data-line-font]');
+      if (fontSel) {
+        const row = state.config.lyrics.find((x) => x.id === fontSel.getAttribute('data-line-font'));
+        if (row) {
+          row.fontId = fontSel.value;
+          markSaved('Lyric fontu kaydedildi');
+        }
+      }
+
+      const colorSel = event.target.closest('[data-line-color]');
+      if (colorSel) {
+        const row = state.config.lyrics.find((x) => x.id === colorSel.getAttribute('data-line-color'));
+        if (row) {
+          row.textColor = colorSel.value;
+          markSaved('Lyric yazı rengi kaydedildi');
+        }
+      }
+
+      const outlineColorSel = event.target.closest('[data-line-outline-color]');
+      if (outlineColorSel) {
+        const row = state.config.lyrics.find((x) => x.id === outlineColorSel.getAttribute('data-line-outline-color'));
+        if (row) {
+          row.outlineColor = outlineColorSel.value;
+          markSaved('Lyric outline rengi kaydedildi');
+        }
+      }
+
+      const outlineWidthSel = event.target.closest('[data-line-outline-width]');
+      if (outlineWidthSel) {
+        const row = state.config.lyrics.find((x) => x.id === outlineWidthSel.getAttribute('data-line-outline-width'));
+        if (row) {
+          row.outlineWidth = Number(outlineWidthSel.value) || 0;
+          markSaved('Lyric outline kalınlığı kaydedildi');
+        }
+      }
+    });
+
+    el.applyAllEffect.addEventListener('change', () => {
+      if (!el.applyAllEffect.value) return;
+      if (el.applyAllEffect.value === '__random__') {
+        const effectValues = EFFECTS.map(([value]) => value);
+        const selected = pickRandomStableByText(state.config.lyrics, () => effectValues[Math.floor(Math.random() * effectValues.length)]);
+        state.config.lyrics = state.config.lyrics.map((x, idx) => ({ ...x, effect: selected[idx] }));
+      } else {
+        state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, effect: el.applyAllEffect.value }));
+      }
+      renderLyrics();
+      markSaved('Tüm lyric efektleri kaydedildi');
+    });
+
+    el.applyAllFont.addEventListener('change', () => {
+      if (el.applyAllFont.value === '__random__') {
+        const fontValues = state.config.fonts.map((x) => x.id);
+        if (!fontValues.length) {
+          alert('Random font için önce font yükleyin.');
+          return;
+        }
+        const selected = pickRandomStableByText(state.config.lyrics, () => fontValues[Math.floor(Math.random() * fontValues.length)]);
+        state.config.lyrics = state.config.lyrics.map((x, idx) => ({ ...x, fontId: selected[idx] }));
+      } else {
+        state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, fontId: el.applyAllFont.value }));
+      }
+      renderLyrics();
+      markSaved('Tüm lyric fontları kaydedildi');
+    });
+
+    el.applyAllTextColor?.addEventListener('input', () => {
+      state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, textColor: el.applyAllTextColor.value }));
+      markSaved('Tüm lyric yazı rengi kaydedildi');
+    });
+
+    el.applyAllOutlineColor?.addEventListener('input', () => {
+      state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, outlineColor: el.applyAllOutlineColor.value }));
+      markSaved('Tüm lyric outline rengi kaydedildi');
+    });
+
+    el.applyAllOutlineWidth?.addEventListener('input', () => {
+      const width = Number(el.applyAllOutlineWidth.value) || 0;
+      state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, outlineWidth: width }));
+      markSaved('Tüm lyric outline kalınlığı kaydedildi');
+    });
+
+    el.desktopLyricScale?.addEventListener('input', () => {
+      state.config.lyricLayout.desktopScale = Number(el.desktopLyricScale.value) || 1;
+      markSaved('Desktop lyric boyutu kaydedildi');
+    });
+
+    el.mobileLyricScale?.addEventListener('input', () => {
+      state.config.lyricLayout.mobileScale = Number(el.mobileLyricScale.value) || 1.35;
+      markSaved('Mobile lyric boyutu kaydedildi');
+    });
+
+    el.mobileFullWidthLyrics?.addEventListener('change', () => {
+      state.config.lyricLayout.mobileFullWidth = el.mobileFullWidthLyrics.checked;
+      markSaved('Mobil tam genişlik lyric ayarı kaydedildi');
+    });
+
+    el.fontFiles.addEventListener('change', async () => {
+      const files = Array.from(el.fontFiles.files || []);
+      if (!files.length) return;
+
+      for (const file of files) {
+        if (!(/\.(woff2?|ttf|otf)$/i).test(file.name)) continue;
+        const key = `font-${uid()}`;
+        await assetPut(key, file);
+        state.config.fonts.push({
+          id: uid(),
+          name: file.name.replace(/\.[^.]+$/, ''),
+          family: `upload-${uid()}`,
+          mimeType: file.type,
+          assetKey: key,
+          objectUrl: URL.createObjectURL(file),
+        });
+      }
+
+      mountFontFaces();
+      renderFonts();
+      renderLyrics();
+      markSaved('Fontlar kaydedildi');
+    });
+
+    el.fontPreviewList.addEventListener('click', async (event) => {
+      const btn = event.target.closest('[data-remove-font]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-remove-font');
+      const font = state.config.fonts.find((x) => x.id === id);
+      if (font) {
+        await assetDelete(font.assetKey);
+        revokeObjectUrl(font.objectUrl);
+      }
+      state.config.fonts = state.config.fonts.filter((x) => x.id !== id);
+      state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, fontId: x.fontId === id ? '' : x.fontId }));
+      mountFontFaces();
+      renderFonts();
+      renderLyrics();
+      markSaved('Font kaldırıldı');
+    });
+
+    document.querySelectorAll('[data-save-section]').forEach((btn) => {
+      btn.addEventListener('click', () => markSaved(`${btn.getAttribute('data-save-section')} ayarları kaydedildi`));
+    });
+
+    el.saveAllBtn.addEventListener('click', () => markSaved('Tüm ayarlar kaydedildi'));
+    renderAll();
   }
 
-  function onAddSuggestion(event) {
-    event.preventDefault();
-    const handle = el.suggestionHandle.value.trim();
-    const bio = el.suggestionBio.value.trim();
-    if (!handle || !bio) return;
+  function bindFeed() {
+    mountFontFaces();
 
-    const normalized = handle.startsWith('@') ? handle : `@${handle}`;
-    state.suggestions.unshift({ id: uid(), handle: normalized, bio });
-    persistSuggestions();
-    renderSuggestions();
-    renderSuggestionManager();
-    el.suggestionForm.reset();
-  }
+    const el = {
+      feedStage: document.getElementById('feedStage'),
+      backgroundLayer: document.getElementById('backgroundLayer'),
+      lyricsZone: document.getElementById('lyricsZone'),
+      lyricLine: document.getElementById('lyricLine'),
+      musicPlayer: document.getElementById('musicPlayer'),
+      playerSongName: document.getElementById('playerSongName'),
+      playBtn: document.getElementById('playBtn'),
+      stagePlayBtn: document.getElementById('stagePlayBtn'),
+      seekBar: document.getElementById('seekBar'),
+      currentTime: document.getElementById('currentTime'),
+      duration: document.getElementById('duration'),
+      audio: document.getElementById('audio'),
+      recordBtn: document.getElementById('recordBtn'),
+      downloadRecord: document.getElementById('downloadRecord'),
+      visualizerTop: document.getElementById('visualizerTop'),
+      visualizerBottom: document.getElementById('visualizerBottom'),
+      playerViz: document.getElementById('playerViz'),
+    };
 
-  function deleteSuggestion(id) {
-    state.suggestions = state.suggestions.filter((x) => x.id !== id);
-    persistSuggestions();
-    renderSuggestions();
-    renderSuggestionManager();
-  }
+    const zones = Array.from(document.querySelectorAll('.visualizer-zone'));
 
-  function maybePauseAtPost(now) {
-    if (!state.pauseAtPosts || page !== 'feed') return;
+    const targetStageSize = page === 'mobile' ? { width: 2160, height: 3840 } : { width: 3840, height: 2160 };
+    el.feedStage.dataset.targetResolution = `${targetStageSize.width}x${targetStageSize.height}`;
 
-    const cards = Array.from(document.querySelectorAll('.post-card'));
-    for (const card of cards) {
-      if (card.dataset.paused === '1') continue;
-      const pauseMs = Number(card.dataset.pause || 0);
-      if (!pauseMs) continue;
-      const rect = card.getBoundingClientRect();
-      if (rect.top >= 70 && rect.top <= 160) {
-        card.dataset.paused = '1';
-        state.isPaused = true;
-        state.pauseUntil = now + pauseMs;
-        break;
+    function applyStageScale() {
+      const shell = el.feedStage.parentElement;
+      const vw = window.innerWidth - 20;
+      const vh = window.innerHeight - 20;
+      const fitScale = Math.max(0.05, Math.min(vw / targetStageSize.width, vh / targetStageSize.height));
+      const previewBoost = page === 'mobile' ? 2 : 1;
+      const scale = Math.max(0.05, fitScale * previewBoost);
+      el.feedStage.classList.add('scaled-stage');
+      el.feedStage.style.setProperty('--stage-scale', String(scale));
+      shell.style.width = `${Math.floor(targetStageSize.width * scale)}px`;
+      shell.style.height = `${Math.floor(targetStageSize.height * scale)}px`;
+    }
+
+    function resizeCanvas(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { ctx, w: rect.width, h: rect.height };
+    }
+
+    function pickFont(fontId) {
+      const font = state.config.fonts.find((x) => x.id === fontId);
+      return font ? `'${font.family}', Inter, sans-serif` : 'Inter, sans-serif';
+    }
+
+    function applyModeVisibility() {
+      const vizEnabled = !!(state.config.visualizer.enabled && state.config.song.visualizerWithSong);
+      zones.forEach((zone) => zone.classList.toggle('hidden', !vizEnabled));
+      el.musicPlayer.classList.toggle('hidden', !state.config.song.showPlayer);
+    }
+
+    function applyLyricAreaLayout() {
+      const isMobile = page === 'mobile';
+      if (!isMobile) {
+        el.lyricsZone.style.left = '8%';
+        el.lyricsZone.style.width = '84%';
+        el.lyricsZone.style.top = '21%';
+        el.lyricsZone.style.height = '58%';
+        return;
+      }
+      const full = !!state.config.lyricLayout?.mobileFullWidth;
+      el.lyricsZone.style.left = full ? '2%' : '6%';
+      el.lyricsZone.style.width = full ? '96%' : '88%';
+      el.lyricsZone.style.top = '21%';
+      el.lyricsZone.style.height = '58%';
+    }
+
+    function setRecordingUI(active) {
+      state.isRecording = active;
+      document.body.classList.toggle('recording-mode', active);
+      if (active) {
+        if (state.stopOnTapHandler) el.feedStage.removeEventListener('pointerdown', state.stopOnTapHandler);
+        state.stopOnTapHandler = () => {
+          stopRecording();
+        };
+        el.feedStage.addEventListener('pointerdown', state.stopOnTapHandler);
+      } else if (state.stopOnTapHandler) {
+        el.feedStage.removeEventListener('pointerdown', state.stopOnTapHandler);
+        state.stopOnTapHandler = null;
       }
     }
-  }
 
-  function maybeResetLoop() {
-    if (state.loopResetPending || page !== 'feed') return;
-    const nearEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
-    if (!nearEnd) return;
+    function setupBackground() {
+      el.backgroundLayer.innerHTML = '';
+      el.feedStage.style.background = state.config.background.color || '#040812';
+      const items = state.config.background.items.filter((x) => x.objectUrl);
+      if (!items.length) return;
 
-    state.loopResetPending = true;
-    window.setTimeout(() => {
-      document.querySelectorAll('.post-card').forEach((card) => delete card.dataset.paused);
-      window.scrollTo({ top: 0, behavior: 'auto' });
-      state.loopResetPending = false;
-    }, 900);
-  }
+      const mode = state.config.background.mode;
+      const mount = (index) => {
+        const item = items[index % items.length];
+        el.backgroundLayer.innerHTML = '';
 
-  function tick(now) {
-    if (page !== 'feed' || !state.autoScroll) {
-      state.lastTime = now;
-      requestAnimationFrame(tick);
-      return;
+        if (item.kind === 'gif') {
+          const img = document.createElement('img');
+          img.src = item.objectUrl;
+          img.alt = 'background';
+          el.backgroundLayer.appendChild(img);
+          if (mode === 'list' && items.length > 1) {
+            window.setTimeout(() => mount((index + 1) % items.length), 8000);
+          }
+          return;
+        }
+
+        const video = document.createElement('video');
+        video.src = item.objectUrl;
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.loop = mode === 'loop';
+        video.onended = () => {
+          if (mode === 'list') mount((index + 1) % items.length);
+        };
+        el.backgroundLayer.appendChild(video);
+      };
+
+      mount(0);
     }
 
-    maybeResetLoop();
-
-    if (state.isPaused) {
-      if (now >= state.pauseUntil) state.isPaused = false;
-      state.lastTime = now;
-      requestAnimationFrame(tick);
-      return;
+    function setupAudio() {
+      const song = state.config.song;
+      if (!song.objectUrl) {
+        el.playerSongName.textContent = 'Şarkı yüklenmedi';
+        el.stagePlayBtn.disabled = true;
+        el.stagePlayBtn.textContent = 'Şarkı yok';
+        return;
+      }
+      el.audio.src = song.objectUrl;
+      el.playerSongName.textContent = song.title || song.fileName || 'Yüklenen şarkı';
+      el.stagePlayBtn.disabled = false;
+      el.stagePlayBtn.textContent = '▶ Müziği Başlat / Durdur';
     }
 
-    const delta = (now - state.lastTime) / 1000;
-    window.scrollBy(0, state.speedPxPerSecond * delta);
-    maybePauseAtPost(now);
-    state.lastTime = now;
-    requestAnimationFrame(tick);
-  }
-
-  function bindEvents() {
-    if (el.postType && el.parentPostSelect) {
-      el.postType.addEventListener('change', () => {
-        el.parentPostSelect.disabled = el.postType.value !== 'comment';
-      });
-      el.parentPostSelect.disabled = true;
+    function ensureAudioGraph() {
+      if (state.audioCtx) return;
+      state.audioCtx = new AudioContext();
+      const source = state.audioCtx.createMediaElementSource(el.audio);
+      state.analyser = state.audioCtx.createAnalyser();
+      state.analyser.fftSize = 512;
+      source.connect(state.analyser);
+      state.analyser.connect(state.audioCtx.destination);
+      state.audioData = new Uint8Array(state.analyser.frequencyBinCount);
     }
 
-    if (el.form) {
-      el.form.addEventListener('submit', onPublish);
+    function drawBar(ctx, w, h, color) {
+      ctx.clearRect(0, 0, w, h);
+      if (!state.analyser) return;
+      state.analyser.getByteFrequencyData(state.audioData);
+      const bars = 96;
+      const bw = w / bars;
+      const maxBin = Math.max(8, Math.floor(state.audioData.length * 0.68));
+      const center = (bars - 1) / 2;
+      ctx.fillStyle = color;
+      for (let i = 0; i < bars; i += 1) {
+        const ratio = i / (bars - 1);
+        const idx = Math.floor(ratio * maxBin);
+        const amp = state.audioData[idx] / 255;
+        const distance = 1 - Math.abs(i - center) / center;
+        const bh = Math.max(2, amp * h * (0.24 + distance * 0.92));
+        const barThickness = Math.max(1.2, bw * 0.48);
+        const x = i * bw + (bw - barThickness) / 2;
+        ctx.fillRect(x, (h - bh) / 2, barThickness, bh);
+      }
     }
 
-    if (el.manageList) {
-      el.manageList.addEventListener('click', (event) => {
-        const btn = event.target.closest('[data-delete-post-id]');
-        if (!btn) return;
-        deletePostOrComment(btn.getAttribute('data-delete-post-id'));
-      });
+    function drawWave(ctx, w, h, color) {
+      ctx.clearRect(0, 0, w, h);
+      if (!state.analyser) return;
+      state.analyser.getByteTimeDomainData(state.audioData);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let i = 0; i < state.audioData.length; i += 1) {
+        const x = (i / (state.audioData.length - 1)) * w;
+        const y = (state.audioData[i] / 255) * h;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
     }
 
-    if (el.suggestionForm) {
-      el.suggestionForm.addEventListener('submit', onAddSuggestion);
+    function drawParticle(ctx, w, h, color) {
+      ctx.clearRect(0, 0, w, h);
+      if (!state.analyser) return;
+      state.analyser.getByteFrequencyData(state.audioData);
+      const cy = h / 2;
+      for (let i = 0; i < 130; i += 1) {
+        const amp = state.audioData[i % state.audioData.length] / 255;
+        const x = (i / 130) * w;
+        const y = cy + (Math.random() - 0.5) * amp * h * 0.5;
+        ctx.globalAlpha = 0.25 + amp * 0.75;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, 1 + amp * 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
 
-    if (el.suggestionManageList) {
-      el.suggestionManageList.addEventListener('click', (event) => {
-        const btn = event.target.closest('[data-delete-suggestion-id]');
-        if (!btn) return;
-        deleteSuggestion(btn.getAttribute('data-delete-suggestion-id'));
-      });
+    function renderVisualizer() {
+      const enabled = state.config.visualizer.enabled && state.config.song.visualizerWithSong && !el.audio.paused && !!state.analyser;
+      if (!enabled) return;
+
+      for (const canvas of [el.visualizerTop, el.visualizerBottom, el.playerViz]) {
+        const { ctx, w, h } = resizeCanvas(canvas);
+        if (state.config.visualizer.type === 'bar') drawBar(ctx, w, h, state.config.visualizer.color);
+        if (state.config.visualizer.type === 'wave') drawWave(ctx, w, h, state.config.visualizer.color);
+        if (state.config.visualizer.type === 'particle') drawParticle(ctx, w, h, state.config.visualizer.color);
+      }
+
+      state.visualizerRaf = requestAnimationFrame(renderVisualizer);
     }
 
-    if (el.searchInput) {
-      el.searchInput.addEventListener('input', renderSuggestions);
+    function fitLyric(text, fontFamily) {
+      const zone = el.lyricsZone.getBoundingClientRect();
+      const mobileMode = page === 'mobile';
+      const scale = mobileMode ? (state.config.lyricLayout?.mobileScale || 1.35) : (state.config.lyricLayout?.desktopScale || 1);
+      const maxW = zone.width * (mobileMode ? 0.97 : 0.96);
+      const maxH = zone.height * (mobileMode ? 0.72 : 0.58);
+      let size = Math.min(mobileMode ? 230 : 170, Math.floor(zone.height * (mobileMode ? 0.24 : 0.20)) * scale);
+      const minSize = mobileMode ? 56 : 34;
+
+      el.lyricLine.style.fontFamily = fontFamily;
+      el.lyricLine.style.whiteSpace = mobileMode ? 'normal' : 'nowrap';
+      el.lyricLine.style.textAlign = 'center';
+      el.lyricLine.textContent = text;
+      el.lyricLine.style.fontSize = `${size}px`;
+
+      while ((el.lyricLine.scrollWidth > maxW || el.lyricLine.scrollHeight > maxH) && size > minSize) {
+        size -= 2;
+        el.lyricLine.style.fontSize = `${size}px`;
+      }
     }
 
-    if (el.autoScrollEnabled) {
-      el.autoScrollEnabled.addEventListener('change', () => {
-        state.autoScroll = el.autoScrollEnabled.checked;
-      });
+    function activateLyric(line) {
+      fitLyric(line.text, pickFont(line.fontId));
+      const dur = Math.max(0.2, line.end - line.start);
+      el.lyricLine.style.setProperty('--lyric-duration', `${Math.max(0.15, dur * 0.92)}s`);
+      el.lyricLine.style.setProperty('--lyric-color', line.textColor || '#ffffff');
+      el.lyricLine.style.setProperty('--lyric-outline-color', line.outlineColor || '#000000');
+      el.lyricLine.style.setProperty('--lyric-outline-width', `${Number.isFinite(line.outlineWidth) ? line.outlineWidth : 3}px`);
+      el.lyricLine.className = `lyric-line ${line.effect || 'effect-fade'}`;
+      state.activeLyricId = line.id;
     }
 
-    if (el.pauseAtPosts) {
-      el.pauseAtPosts.addEventListener('change', () => {
-        state.pauseAtPosts = el.pauseAtPosts.checked;
-      });
+    function lyricLoop() {
+      const lines = state.config.lyrics;
+      if (!lines.length || el.audio.paused) {
+        requestAnimationFrame(lyricLoop);
+        return;
+      }
+
+      const t = el.audio.currentTime;
+      const current = lines.find((line) => t >= line.start && t <= line.end);
+      if (!current) {
+        state.activeLyricId = null;
+        el.lyricLine.className = 'lyric-line';
+        el.lyricLine.textContent = '';
+      } else if (state.activeLyricId !== current.id) {
+        activateLyric(current);
+      }
+
+      if (current && current.effect === 'effect-audio-reactive' && state.analyser) {
+        state.analyser.getByteFrequencyData(state.audioData);
+        const avg = state.audioData.reduce((sum, x) => sum + x, 0) / state.audioData.length;
+        el.lyricLine.style.transform = `scale(${(1 + (avg / 255) * 0.12).toFixed(3)})`;
+      } else {
+        el.lyricLine.style.transform = '';
+      }
+
+      requestAnimationFrame(lyricLoop);
     }
 
-    if (el.scrollSpeed) {
-      el.scrollSpeed.addEventListener('input', () => {
-        state.speedPxPerSecond = Number(el.scrollSpeed.value);
-      });
+    function updateTime() {
+      el.currentTime.textContent = timeLabel(el.audio.currentTime);
+      el.duration.textContent = timeLabel(el.audio.duration);
+      if (Number.isFinite(el.audio.duration) && el.audio.duration > 0) {
+        el.seekBar.value = String((el.audio.currentTime / el.audio.duration) * 100);
+      }
     }
-  }
 
-  function init() {
-    loadData();
-    refresh();
-    bindEvents();
+    async function togglePlay() {
+      if (!state.config.song.objectUrl) {
+        alert('Önce admin panelden şarkı yükleyin.');
+        return;
+      }
 
-    requestAnimationFrame((start) => {
-      state.lastTime = start;
-      requestAnimationFrame(tick);
+      ensureAudioGraph();
+      if (state.audioCtx.state === 'suspended') await state.audioCtx.resume();
+
+      if (el.audio.paused) {
+        await el.audio.play();
+        el.playBtn.textContent = '⏸';
+        el.stagePlayBtn.textContent = '⏸ Müziği Duraklat';
+        cancelAnimationFrame(state.visualizerRaf);
+        renderVisualizer();
+      } else {
+        el.audio.pause();
+        el.playBtn.textContent = '▶';
+        el.stagePlayBtn.textContent = '▶ Müziği Başlat';
+      }
+    }
+
+    async function startRecording() {
+      if (!navigator.mediaDevices?.getDisplayMedia || !window.MediaRecorder) {
+        alert('Bu tarayıcı ekran kaydını desteklemiyor.');
+        return;
+      }
+      try {
+        if (document.fullscreenElement !== el.feedStage) await el.feedStage.requestFullscreen();
+
+        const targetWidth = targetStageSize.width;
+        const targetHeight = targetStageSize.height;
+
+        state.stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            displaySurface: 'browser',
+            cursor: 'never',
+            frameRate: { ideal: 60, max: 60 },
+            width: { ideal: targetWidth, max: targetWidth },
+            height: { ideal: targetHeight, max: targetHeight },
+            aspectRatio: { ideal: targetWidth / targetHeight },
+          },
+          audio: false,
+          preferCurrentTab: true,
+          selfBrowserSurface: 'include',
+          surfaceSwitching: 'exclude',
+        });
+
+        const videoTrack = state.stream.getVideoTracks()[0];
+        const settings = videoTrack?.getSettings?.() || {};
+        if (settings.displaySurface && settings.displaySurface !== 'browser') {
+          state.stream.getTracks().forEach((t) => t.stop());
+          state.stream = null;
+          alert('Lütfen kayıt için yalnızca tarayıcı sekmesini seçin (pencere/ekran değil).');
+          return;
+        }
+
+        try {
+          await videoTrack.applyConstraints({
+            width: { exact: targetWidth },
+            height: { exact: targetHeight },
+            frameRate: { ideal: 60, max: 60 },
+          });
+        } catch {
+          // browser may reject exact constraints depending on capture source
+        }
+
+        const finalSettings = videoTrack?.getSettings?.() || {};
+        if ((finalSettings.width && finalSettings.width !== targetWidth) || (finalSettings.height && finalSettings.height !== targetHeight)) {
+          state.stream.getTracks().forEach((t) => t.stop());
+          state.stream = null;
+          alert(`Kayıt çözünürlüğü tam ${targetWidth}x${targetHeight} olmalı. Lütfen sekme paylaşımında çözünürlük seçimini kontrol edin.`);
+          return;
+        }
+
+        state.chunks = [];
+        const preferredMime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? 'video/webm;codecs=vp9'
+          : 'video/webm';
+        state.mediaRecorder = new MediaRecorder(state.stream, {
+          mimeType: preferredMime,
+          videoBitsPerSecond: 80_000_000,
+        });
+        state.mediaRecorder.ondataavailable = (event) => {
+          if (event.data?.size) state.chunks.push(event.data);
+        };
+        state.mediaRecorder.onstop = () => {
+          const blob = new Blob(state.chunks, { type: 'video/webm' });
+          el.downloadRecord.href = URL.createObjectURL(blob);
+          el.downloadRecord.classList.remove('hidden');
+          el.recordBtn.textContent = '🎥 Fullscreen Kayda Başla';
+          setRecordingUI(false);
+          state.stream?.getTracks().forEach((t) => t.stop());
+          state.stream = null;
+          if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+          applyModeVisibility();
+        };
+
+        state.mediaRecorder.start();
+        setRecordingUI(true);
+        el.recordBtn.textContent = '⏹ Kaydı Durdur';
+        if (!state.config.song.showPlayer) el.musicPlayer.classList.add('hidden');
+        if (el.audio.paused) await togglePlay();
+      } catch {
+        setRecordingUI(false);
+        alert('Kayıt başlatılamadı. İzinleri kontrol edin.');
+      }
+    }
+
+    function stopRecording() {
+      if (!state.mediaRecorder || state.mediaRecorder.state === 'inactive') return;
+      state.mediaRecorder.stop();
+    }
+
+    el.playBtn.addEventListener('click', togglePlay);
+    el.stagePlayBtn.addEventListener('click', togglePlay);
+    el.audio.addEventListener('timeupdate', updateTime);
+    el.audio.addEventListener('loadedmetadata', updateTime);
+    el.audio.addEventListener('ended', () => {
+      el.playBtn.textContent = '▶';
+      el.stagePlayBtn.textContent = '▶ Müziği Başlat';
     });
+
+    el.seekBar.addEventListener('input', () => {
+      if (!Number.isFinite(el.audio.duration) || el.audio.duration <= 0) return;
+      el.audio.currentTime = (Number(el.seekBar.value) / 100) * el.audio.duration;
+      updateTime();
+    });
+
+    el.recordBtn.addEventListener('click', () => {
+      if (state.mediaRecorder && state.mediaRecorder.state === 'recording') stopRecording();
+      else startRecording();
+    });
+
+    applyStageScale();
+    applyModeVisibility();
+    applyLyricAreaLayout();
+    setupBackground();
+    setupAudio();
+    lyricLoop();
+
+    window.addEventListener('resize', () => {
+      applyStageScale();
+      applyLyricAreaLayout();
+    });
+  }
+
+  async function init() {
+    await hydrateAssetUrls();
+    if (page === 'admin') bindAdmin();
+    if (page === 'feed' || page === 'mobile') bindFeed();
   }
 
   init();
