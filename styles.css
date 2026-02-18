@@ -256,6 +256,7 @@ button, .nav-btn {
   left: 8%;
   width: 84%;
   height: 58%;
+  overflow: visible;
   z-index: 5;
   display: grid;
   place-items: center;
@@ -266,13 +267,12 @@ button, .nav-btn {
 .lyric-line {
   font-weight: 900;
   text-shadow: 0 12px 22px rgba(0, 0, 0, 0.65);
-  max-width: 100%;
+  max-width: none;
   white-space: nowrap;
   opacity: 0;
   color: var(--lyric-color, #ffffff);
   -webkit-text-stroke: var(--lyric-outline-width, 3px) var(--lyric-outline-color, #000000);
   paint-order: stroke fill;
-  font-size: 120px;
 }
 
 .music-player {
@@ -322,9 +322,9 @@ button, .nav-btn {
 .effect-opacity-pulse { animation: opacityPulse var(--lyric-duration, 1s) ease both; }
 .effect-glitch { animation: glitch var(--lyric-duration, 1s) steps(2) both; }
 .effect-shake { animation: shake var(--lyric-duration, 1s) both; }
-.effect-letter-stagger { animation: letterIn var(--lyric-duration, 1s) steps(20) both; overflow: hidden; border-right: 2px solid #fff; }
+.effect-letter-stagger { animation: letterIn var(--lyric-duration, 1s) steps(20) both; border-right: 2px solid #fff; }
 .effect-distortion-flash { animation: distortionFlash var(--lyric-duration, 1s) both; }
-.effect-typewriter { animation: typing var(--lyric-duration, 1s) steps(20) both; overflow: hidden; border-right: 2px solid #fff; }
+.effect-typewriter { animation: typing var(--lyric-duration, 1s) steps(20) both; border-right: 2px solid #fff; }
 .effect-mask-reveal { animation: maskReveal var(--lyric-duration, 1s) both; clip-path: inset(0 100% 0 0); }
 .effect-scale-impact { animation: scaleImpact var(--lyric-duration, 1s) both; }
 .effect-word-highlighting { animation: wordHighlight var(--lyric-duration, 1s) linear both; }
@@ -467,7 +467,7 @@ body.recording-mode #seekBar {
 .mobile-stage .lyric-line {
   white-space: normal;
   line-height: 1.12;
-  max-width: 96%;
+  max-width: none;
   text-align: center;
 }
 

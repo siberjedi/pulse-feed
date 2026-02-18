@@ -918,29 +918,15 @@
     }
 
     function fitLyric(text, fontFamily) {
-      const zone = el.lyricsZone.getBoundingClientRect();
       const mobileMode = page === 'mobile';
       const scale = mobileMode ? (state.config.lyricLayout?.mobileScale || 12) : (state.config.lyricLayout?.desktopScale || 12);
-      const maxW = zone.width * (mobileMode ? 0.98 : 0.97);
-      const maxH = zone.height * (mobileMode ? 0.75 : 0.62);
-      let size = Math.max(12, Number(scale) || 12);
-      const minSize = 12;
+      const size = Math.max(12, Number(scale) || 12);
 
       el.lyricLine.style.fontFamily = fontFamily;
       el.lyricLine.style.whiteSpace = mobileMode ? 'normal' : 'nowrap';
       el.lyricLine.style.textAlign = 'center';
       el.lyricLine.textContent = text;
       el.lyricLine.style.fontSize = `${size}px`;
-
-      for (let i = 0; i < 24 && size > minSize; i += 1) {
-        const widthRatio = el.lyricLine.scrollWidth / Math.max(1, maxW);
-        const heightRatio = el.lyricLine.scrollHeight / Math.max(1, maxH);
-        const overflowRatio = Math.max(widthRatio, heightRatio);
-        if (overflowRatio <= 1.01) break;
-        const shrinkFactor = Math.min(4, overflowRatio + 0.05);
-        size = Math.max(minSize, Math.floor(size / shrinkFactor));
-        el.lyricLine.style.fontSize = `${size}px`;
-      }
     }
 
     function drawCoverFrame(ctx, source, targetW, targetH) {
