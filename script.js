@@ -1223,6 +1223,7 @@
     el.audio.addEventListener('ended', () => {
       el.playBtn.textContent = '▶';
       el.stagePlayBtn.textContent = '▶ Müziği Başlat';
+      if (state.mediaRecorder && state.mediaRecorder.state === 'recording') stopRecording();
     });
 
     el.seekBar.addEventListener('input', () => {
