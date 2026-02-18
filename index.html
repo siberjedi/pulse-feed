@@ -1,12 +1,940 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0; url=admin.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse</title>
+  <title>Tarayıcı Satranç Analiz Uygulaması</title>
+  <script src="https://cdn.jsdelivr.net/npm/chess.js@1.0.0-beta.8/dist/chess.min.js"></script>
+  <style>
+    :root {
+      --bg: #1f2025;
+      --panel: #2b2d33;
+      --panel-2: #353841;
+      --text: #e8ebf1;
+      --muted: #aeb6c4;
+      --accent: #5aa2ff;
+      --danger: #ff5f6d;
+      --success: #44d17d;
+      --white-square: #f0d9b5;
+      --black-square: #b58863;
+      --legal: rgba(78, 165, 255, 0.45);
+      --attacked: rgba(255, 76, 92, 0.28);
+      --safe: rgba(74, 156, 255, 0.22);
+      --threat: 0 0 0 3px rgba(255, 95, 109, 0.65) inset;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 18px;
+    }
+
+    .app {
+      width: min(1200px, 100%);
+      display: grid;
+      grid-template-columns: minmax(300px, 620px) minmax(280px, 380px);
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid #43464f;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+    }
+
+    .board-wrap {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .board {
+      width: 100%;
+      max-width: 620px;
+      aspect-ratio: 1 / 1;
+      border: 1px solid #4f5360;
+      border-radius: 12px;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      user-select: none;
+    }
+
+    .square {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(22px, 4vw, 44px);
+      cursor: pointer;
+      transition: filter .15s ease;
+    }
+
+    .square.light { background: var(--white-square); color: #1c1e23; }
+    .square.dark { background: var(--black-square); color: #1c1e23; }
+    .square:hover { filter: brightness(1.07); }
+
+    .coord {
+      position: absolute;
+      font-size: 11px;
+      opacity: .75;
+      font-weight: 600;
+      pointer-events: none;
+    }
+
+    .coord.file { bottom: 2px; right: 4px; }
+    .coord.rank { top: 2px; left: 4px; }
+
+    .square.legal::after {
+      content: "";
+      width: 28%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: var(--legal);
+      position: absolute;
+    }
+
+    .square.attacked { box-shadow: 0 0 0 999px var(--attacked) inset; }
+    .square.safe-king { box-shadow: 0 0 0 999px var(--safe) inset; }
+    .square.threatened-piece { box-shadow: var(--threat); }
+    .square.selected { outline: 3px solid var(--accent); outline-offset: -3px; }
+
+    .piece-side-panel {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .piece-btn {
+      border: 1px solid #555968;
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 26px;
+      line-height: 1;
+      padding: 10px 4px;
+      cursor: pointer;
+      transition: all .15s ease;
+    }
+
+    .piece-btn.active,
+    .piece-btn:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      background: #404452;
+    }
+
+    .controls {
+      display: grid;
+      gap: 10px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button,
+    select {
+      border: 1px solid #595d69;
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 9px 11px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: #7ab7ff;
+      color: #121723;
+      font-weight: 700;
+    }
+
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .checkbox-group {
+      display: flex;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .checkbox-group label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .output {
+      background: #24262d;
+      border: 1px solid #4a4e5a;
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 46px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      color: #e4e8f0;
+      word-break: break-all;
+    }
+
+    .status {
+      min-height: 20px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--success); }
+
+    .analysis {
+      display: grid;
+      gap: 14px;
+    }
+
+    .eval-wrap {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .eval-bar {
+      height: 220px;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid #5b6070;
+      background: #0f1014;
+      position: relative;
+    }
+
+    .eval-fill {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      background: linear-gradient(#f6f8ff, #b8c1d9);
+      bottom: 0;
+      height: 50%;
+      transition: height .35s ease;
+    }
+
+    .info-grid {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .info-item {
+      background: #24262d;
+      border: 1px solid #4a4e5a;
+      border-radius: 10px;
+      padding: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .warning {
+      background: rgba(255, 95, 109, 0.15);
+      color: #ffd8dc;
+      border: 1px solid rgba(255, 95, 109, 0.45);
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 13px;
+      min-height: 36px;
+    }
+
+    .muted { color: var(--muted); }
+
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; }
+      .board { max-width: unset; }
+    }
+  </style>
 </head>
 <body>
-  <p>Go to <a href="admin.html">admin.html</a>.</p>
+  <div class="app">
+    <section class="panel board-wrap">
+      <div id="board" class="board" aria-label="Satranç tahtası"></div>
+      <div>
+        <span class="label">Taş Seçimi</span>
+        <div id="piecePanel" class="piece-side-panel"></div>
+      </div>
+    </section>
+
+    <section class="panel controls">
+      <h2 style="margin: 0 0 4px; font-size: 19px;">Satranç Analiz Paneli</h2>
+
+      <div>
+        <span class="label">Hamle Sırası</span>
+        <select id="sideToMove">
+          <option value="w">Beyaz</option>
+          <option value="b">Siyah</option>
+        </select>
+      </div>
+
+      <div>
+        <span class="label">Rok Hakları</span>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="castleK" checked /> K</label>
+          <label><input type="checkbox" id="castleQ" checked /> Q</label>
+          <label><input type="checkbox" id="castlek" checked /> k</label>
+          <label><input type="checkbox" id="castleq" checked /> q</label>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="clearBoardBtn">Tahtayı Temizle</button>
+        <button id="startPosBtn">Başlangıç Pozisyonu</button>
+        <button id="flipBtn">Tahtayı Çevir</button>
+      </div>
+
+      <div>
+        <span class="label">Üretilen FEN</span>
+        <div id="fenOutput" class="output"></div>
+      </div>
+
+      <div class="row">
+        <button id="startAnalysisBtn" class="primary">Analizi Başlat</button>
+        <button id="undoBtn" disabled>Geri Al</button>
+        <button id="resetBtn" disabled>Editöre Dön</button>
+      </div>
+
+      <div id="status" class="status muted">Editör modu aktif. Taş seçip tahtaya yerleştirebilirsiniz.</div>
+
+      <section class="analysis">
+        <div class="eval-wrap">
+          <div class="eval-bar"><div id="evalFill" class="eval-fill"></div></div>
+          <div class="info-grid">
+            <div class="info-item"><strong>Değerlendirme:</strong> <span id="evalText">0.00</span></div>
+            <div class="info-item"><strong>En İyi Hamle:</strong> <span id="bestMove">-</span></div>
+            <div class="info-item"><strong>Ana Varyant:</strong> <span id="pvLine">-</span></div>
+          </div>
+        </div>
+        <div id="queenWarning" class="warning">Vezir tehdidi yok.</div>
+      </section>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      const PIECE_UNICODE = {
+        P: "♙", N: "♘", B: "♗", R: "♖", Q: "♕", K: "♔",
+        p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚"
+      };
+
+      const PIECE_LIST = ["K", "Q", "R", "B", "N", "P", "k", "q", "r", "b", "n", "p"];
+      const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
+
+      // Uygulama durumu
+      const state = {
+        mode: "editor",
+        boardMap: {},
+        selectedEditorPiece: "K",
+        selectedSquare: null,
+        legalMoves: [],
+        attackedSquares: new Set(),
+        safeKingSquares: new Set(),
+        threatenedPieces: new Set(),
+        queenWarning: "",
+        flipped: false,
+        chess: null,
+        engine: null,
+        engineReady: false,
+        analysisDebounce: null,
+        lastFenForEngine: "",
+        eval: { type: "cp", value: 0, text: "0.00" },
+        bestMove: "-",
+        pv: "-"
+      };
+
+      // DOM referansları
+      const dom = {
+        board: document.getElementById("board"),
+        piecePanel: document.getElementById("piecePanel"),
+        sideToMove: document.getElementById("sideToMove"),
+        castleK: document.getElementById("castleK"),
+        castleQ: document.getElementById("castleQ"),
+        castlek: document.getElementById("castlek"),
+        castleq: document.getElementById("castleq"),
+        clearBoardBtn: document.getElementById("clearBoardBtn"),
+        startPosBtn: document.getElementById("startPosBtn"),
+        flipBtn: document.getElementById("flipBtn"),
+        startAnalysisBtn: document.getElementById("startAnalysisBtn"),
+        undoBtn: document.getElementById("undoBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        fenOutput: document.getElementById("fenOutput"),
+        status: document.getElementById("status"),
+        evalFill: document.getElementById("evalFill"),
+        evalText: document.getElementById("evalText"),
+        bestMove: document.getElementById("bestMove"),
+        pvLine: document.getElementById("pvLine"),
+        queenWarning: document.getElementById("queenWarning")
+      };
+
+      // -------------------- Tahta Çizimi Modülü --------------------
+      function getDisplayRanksAndFiles() {
+        const files = state.flipped ? [...FILES].reverse() : FILES;
+        const ranks = state.flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1];
+        return { files, ranks };
+      }
+
+      function createSquareElement(square) {
+        const fileIndex = FILES.indexOf(square[0]);
+        const rank = Number(square[1]);
+        const isLight = (fileIndex + rank) % 2 === 1;
+
+        const squareEl = document.createElement("div");
+        squareEl.className = `square ${isLight ? "light" : "dark"}`;
+        squareEl.dataset.square = square;
+        squareEl.innerHTML = `<span class="piece"></span>`;
+
+        squareEl.addEventListener("click", () => onSquareClick(square));
+        squareEl.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          onSquareRightClick(square);
+        });
+
+        return squareEl;
+      }
+
+      function renderBoard() {
+        dom.board.innerHTML = "";
+        const { files, ranks } = getDisplayRanksAndFiles();
+
+        for (const rank of ranks) {
+          for (const file of files) {
+            const square = `${file}${rank}`;
+            const squareEl = createSquareElement(square);
+            const piece = getPieceAt(square);
+            if (piece) {
+              squareEl.querySelector(".piece").textContent = PIECE_UNICODE[piece];
+            }
+
+            if (file === files[files.length - 1]) {
+              const rankTag = document.createElement("span");
+              rankTag.className = "coord rank";
+              rankTag.textContent = rank;
+              squareEl.appendChild(rankTag);
+            }
+
+            if (rank === ranks[ranks.length - 1]) {
+              const fileTag = document.createElement("span");
+              fileTag.className = "coord file";
+              fileTag.textContent = file;
+              squareEl.appendChild(fileTag);
+            }
+
+            applySquareOverlays(squareEl, square);
+            dom.board.appendChild(squareEl);
+          }
+        }
+      }
+
+      function renderPiecePanel() {
+        dom.piecePanel.innerHTML = "";
+        for (const piece of PIECE_LIST) {
+          const btn = document.createElement("button");
+          btn.className = "piece-btn" + (state.selectedEditorPiece === piece ? " active" : "");
+          btn.type = "button";
+          btn.textContent = PIECE_UNICODE[piece];
+          btn.title = `${piece === piece.toUpperCase() ? "Beyaz" : "Siyah"} ${piece.toUpperCase()}`;
+          btn.addEventListener("click", () => {
+            state.selectedEditorPiece = piece;
+            renderPiecePanel();
+          });
+          dom.piecePanel.appendChild(btn);
+        }
+      }
+
+      function applySquareOverlays(squareEl, square) {
+        if (state.selectedSquare === square) squareEl.classList.add("selected");
+        if (state.legalMoves.includes(square)) squareEl.classList.add("legal");
+        if (state.attackedSquares.has(square)) squareEl.classList.add("attacked");
+        if (state.safeKingSquares.has(square)) squareEl.classList.add("safe-king");
+        if (state.threatenedPieces.has(square)) squareEl.classList.add("threatened-piece");
+      }
+
+      // -------------------- Editör Modülü --------------------
+      function emptyBoard() {
+        state.boardMap = {};
+      }
+
+      function setPieceAt(square, piece) {
+        if (!piece) {
+          delete state.boardMap[square];
+          return;
+        }
+        state.boardMap[square] = piece;
+      }
+
+      function getPieceAt(square) {
+        if (state.mode === "analysis" && state.chess) {
+          const piece = state.chess.get(square);
+          if (!piece) return null;
+          const symbol = piece.type;
+          return piece.color === "w" ? symbol.toUpperCase() : symbol;
+        }
+        return state.boardMap[square] || null;
+      }
+
+      function loadStartingPositionEditor() {
+        const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        loadFenToEditor(startFen);
+      }
+
+      function loadFenToEditor(fen) {
+        const parts = fen.trim().split(/\s+/);
+        const placement = parts[0];
+        const side = parts[1] || "w";
+        const castling = parts[2] || "-";
+
+        emptyBoard();
+        const ranks = placement.split("/");
+        ranks.forEach((row, rIndex) => {
+          let fileIdx = 0;
+          for (const char of row) {
+            if (/\d/.test(char)) {
+              fileIdx += Number(char);
+            } else {
+              const square = `${FILES[fileIdx]}${8 - rIndex}`;
+              setPieceAt(square, char);
+              fileIdx += 1;
+            }
+          }
+        });
+
+        dom.sideToMove.value = side === "b" ? "b" : "w";
+        dom.castleK.checked = castling.includes("K");
+        dom.castleQ.checked = castling.includes("Q");
+        dom.castlek.checked = castling.includes("k");
+        dom.castleq.checked = castling.includes("q");
+
+        updateFenOutput();
+        resetOverlays();
+        renderBoard();
+      }
+
+      function buildFenFromEditor() {
+        const rows = [];
+        for (let rank = 8; rank >= 1; rank--) {
+          let row = "";
+          let emptyCount = 0;
+          for (const file of FILES) {
+            const piece = state.boardMap[`${file}${rank}`];
+            if (piece) {
+              if (emptyCount > 0) {
+                row += emptyCount;
+                emptyCount = 0;
+              }
+              row += piece;
+            } else {
+              emptyCount += 1;
+            }
+          }
+          if (emptyCount > 0) row += emptyCount;
+          rows.push(row);
+        }
+
+        const side = dom.sideToMove.value;
+        const castling = [
+          dom.castleK.checked ? "K" : "",
+          dom.castleQ.checked ? "Q" : "",
+          dom.castlek.checked ? "k" : "",
+          dom.castleq.checked ? "q" : ""
+        ].join("") || "-";
+
+        return `${rows.join("/")} ${side} ${castling} - 0 1`;
+      }
+
+      function validateKingsForAnalysis() {
+        let whiteKings = 0;
+        let blackKings = 0;
+        for (const piece of Object.values(state.boardMap)) {
+          if (piece === "K") whiteKings += 1;
+          if (piece === "k") blackKings += 1;
+        }
+
+        if (whiteKings !== 1) {
+          return { ok: false, message: whiteKings === 0 ? "Analiz için beyaz şah gerekli." : "Analiz için yalnızca bir beyaz şah olmalı." };
+        }
+        if (blackKings !== 1) {
+          return { ok: false, message: blackKings === 0 ? "Analiz için siyah şah gerekli." : "Analiz için yalnızca bir siyah şah olmalı." };
+        }
+        return { ok: true, message: "" };
+      }
+
+      function updateFenOutput() {
+        if (state.mode === "analysis" && state.chess) {
+          dom.fenOutput.textContent = state.chess.fen();
+          return;
+        }
+        dom.fenOutput.textContent = buildFenFromEditor();
+      }
+
+      // -------------------- Oyun Modülü --------------------
+      function startAnalysis() {
+        const validation = validateKingsForAnalysis();
+        if (!validation.ok) {
+          setStatus(validation.message, "error");
+          return;
+        }
+
+        const fen = buildFenFromEditor();
+        const chess = new Chess();
+        const loaded = chess.load(fen);
+        if (!loaded) {
+          setStatus("Geçersiz FEN üretildi. Tahtayı kontrol edin.", "error");
+          return;
+        }
+
+        state.mode = "analysis";
+        state.chess = chess;
+        state.selectedSquare = null;
+        state.legalMoves = [];
+
+        dom.undoBtn.disabled = false;
+        dom.resetBtn.disabled = false;
+        setStatus("Analiz modu aktif. Taşları sürüklemeden tıklayarak oynayın.", "success");
+
+        updateFenOutput();
+        computeAllOverlays();
+        renderBoard();
+        queueEngineAnalysis();
+      }
+
+      function resetToEditor() {
+        if (!state.chess) return;
+        const fen = state.chess.fen();
+        state.mode = "editor";
+        state.chess = null;
+        state.selectedSquare = null;
+        state.legalMoves = [];
+        resetOverlays();
+        loadFenToEditor(fen);
+        dom.undoBtn.disabled = true;
+        dom.resetBtn.disabled = true;
+        setStatus("Editör moduna dönüldü.", "success");
+      }
+
+      function onSquareClick(square) {
+        if (state.mode === "editor") {
+          setPieceAt(square, state.selectedEditorPiece);
+          updateFenOutput();
+          renderBoard();
+          return;
+        }
+
+        handleAnalysisSquareClick(square);
+      }
+
+      function onSquareRightClick(square) {
+        if (state.mode !== "editor") return;
+        setPieceAt(square, null);
+        updateFenOutput();
+        renderBoard();
+      }
+
+      function handleAnalysisSquareClick(square) {
+        if (!state.chess) return;
+
+        if (!state.selectedSquare) {
+          const piece = state.chess.get(square);
+          if (!piece || piece.color !== state.chess.turn()) return;
+
+          state.selectedSquare = square;
+          state.legalMoves = state.chess.moves({ square, verbose: true }).map(m => m.to);
+          renderBoard();
+          return;
+        }
+
+        if (square === state.selectedSquare) {
+          state.selectedSquare = null;
+          state.legalMoves = [];
+          renderBoard();
+          return;
+        }
+
+        const moveResult = state.chess.move({ from: state.selectedSquare, to: square, promotion: "q" });
+        if (!moveResult) {
+          const piece = state.chess.get(square);
+          if (piece && piece.color === state.chess.turn()) {
+            state.selectedSquare = square;
+            state.legalMoves = state.chess.moves({ square, verbose: true }).map(m => m.to);
+          } else {
+            state.selectedSquare = null;
+            state.legalMoves = [];
+          }
+          renderBoard();
+          return;
+        }
+
+        state.selectedSquare = null;
+        state.legalMoves = [];
+        updateFenOutput();
+        computeAllOverlays();
+        renderBoard();
+        queueEngineAnalysis();
+      }
+
+      function undoMove() {
+        if (!state.chess) return;
+        const undone = state.chess.undo();
+        if (!undone) {
+          setStatus("Geri alınacak hamle yok.", "error");
+          return;
+        }
+        state.selectedSquare = null;
+        state.legalMoves = [];
+        updateFenOutput();
+        computeAllOverlays();
+        renderBoard();
+        queueEngineAnalysis();
+        setStatus("Son hamle geri alındı.", "success");
+      }
+
+      // -------------------- Overlay Modülü --------------------
+      function resetOverlays() {
+        state.attackedSquares = new Set();
+        state.safeKingSquares = new Set();
+        state.threatenedPieces = new Set();
+        state.queenWarning = "";
+        updateQueenWarning();
+      }
+
+      function computeAllOverlays() {
+        resetOverlays();
+        if (!state.chess) return;
+
+        const opponent = state.chess.turn() === "w" ? "b" : "w";
+
+        for (let rank = 1; rank <= 8; rank++) {
+          for (const file of FILES) {
+            const square = `${file}${rank}`;
+            if (isSquareAttackedByColor(square, opponent)) {
+              state.attackedSquares.add(square);
+            }
+          }
+        }
+
+        const turnColor = state.chess.turn();
+        const ownSquares = getSquaresByColor(turnColor);
+        for (const square of ownSquares) {
+          if (isSquareAttackedByColor(square, opponent)) {
+            state.threatenedPieces.add(square);
+          }
+        }
+
+        const kingSquare = findKingSquare(turnColor);
+        if (kingSquare) {
+          const kingMoves = state.chess.moves({ square: kingSquare, verbose: true }).map(m => m.to);
+          for (const to of kingMoves) {
+            if (!isSquareAttackedByColor(to, opponent)) {
+              state.safeKingSquares.add(to);
+            }
+          }
+        }
+
+        const queenSquare = findQueenSquare(turnColor);
+        if (queenSquare && isSquareAttackedByColor(queenSquare, opponent)) {
+          state.queenWarning = `${turnColor === "w" ? "Beyaz" : "Siyah"} vezir tehdit altında!`;
+        }
+
+        updateQueenWarning();
+      }
+
+      function isSquareAttackedByColor(targetSquare, attackerColor) {
+        if (!state.chess) return false;
+        const moves = state.chess.moves({ verbose: true });
+        return moves.some(move => move.color === attackerColor && move.to === targetSquare);
+      }
+
+      function getSquaresByColor(color) {
+        const list = [];
+        for (let rank = 1; rank <= 8; rank++) {
+          for (const file of FILES) {
+            const square = `${file}${rank}`;
+            const piece = state.chess.get(square);
+            if (piece && piece.color === color) list.push(square);
+          }
+        }
+        return list;
+      }
+
+      function findKingSquare(color) {
+        const squares = getSquaresByColor(color);
+        return squares.find(square => {
+          const p = state.chess.get(square);
+          return p && p.type === "k";
+        }) || null;
+      }
+
+      function findQueenSquare(color) {
+        const squares = getSquaresByColor(color);
+        return squares.find(square => {
+          const p = state.chess.get(square);
+          return p && p.type === "q";
+        }) || null;
+      }
+
+      function updateQueenWarning() {
+        dom.queenWarning.textContent = state.queenWarning || "Vezir tehdidi yok.";
+      }
+
+      // -------------------- Motor İletişim Modülü --------------------
+      function initEngine() {
+        try {
+          state.engine = new Worker("https://cdn.jsdelivr.net/npm/stockfish@16.0.0/src/stockfish.js");
+        } catch (error) {
+          setStatus("Stockfish worker başlatılamadı.", "error");
+          return;
+        }
+
+        state.engine.onmessage = (event) => {
+          const line = typeof event.data === "string" ? event.data : "";
+          parseEngineLine(line);
+        };
+
+        state.engine.postMessage("uci");
+        state.engine.postMessage("isready");
+      }
+
+      function queueEngineAnalysis() {
+        if (!state.engine || !state.chess) return;
+        const fen = state.chess.fen();
+        state.lastFenForEngine = fen;
+
+        if (state.analysisDebounce) clearTimeout(state.analysisDebounce);
+        state.analysisDebounce = setTimeout(() => {
+          if (!state.engineReady) {
+            state.engine.postMessage("isready");
+          }
+          state.engine.postMessage("stop");
+          state.engine.postMessage(`position fen ${fen}`);
+          state.engine.postMessage("go depth 18");
+        }, 500);
+      }
+
+      function parseEngineLine(line) {
+        if (!line) return;
+
+        if (line === "readyok") {
+          state.engineReady = true;
+          return;
+        }
+
+        if (line.startsWith("info")) {
+          const depthMatch = line.match(/\bdepth\s+(\d+)/);
+          const depth = depthMatch ? Number(depthMatch[1]) : 0;
+          if (depth < 1) return;
+
+          const mateMatch = line.match(/\bscore\s+mate\s+(-?\d+)/);
+          const cpMatch = line.match(/\bscore\s+cp\s+(-?\d+)/);
+          const pvMatch = line.match(/\bpv\s+(.+)$/);
+
+          if (mateMatch) {
+            state.eval = { type: "mate", value: Number(mateMatch[1]), text: `#${mateMatch[1]}` };
+          } else if (cpMatch) {
+            const cp = Number(cpMatch[1]);
+            state.eval = { type: "cp", value: cp, text: (cp / 100).toFixed(2) };
+          }
+
+          if (pvMatch) {
+            state.pv = pvMatch[1].trim();
+          }
+
+          updateEvalUI();
+          return;
+        }
+
+        if (line.startsWith("bestmove")) {
+          const best = line.split(/\s+/)[1] || "-";
+          state.bestMove = best;
+          dom.bestMove.textContent = best;
+        }
+      }
+
+      function updateEvalUI() {
+        dom.evalText.textContent = state.eval.text;
+        dom.pvLine.textContent = state.pv;
+
+        let whiteAdvantage = 0.5;
+        if (state.eval.type === "mate") {
+          whiteAdvantage = state.eval.value > 0 ? 1 : 0;
+        } else {
+          const cp = Math.max(-1200, Math.min(1200, state.eval.value));
+          whiteAdvantage = 0.5 + (Math.tanh(cp / 350) / 2);
+        }
+
+        const whitePercent = Math.max(0, Math.min(1, whiteAdvantage));
+        dom.evalFill.style.height = `${(whitePercent * 100).toFixed(1)}%`;
+      }
+
+      // -------------------- Yardımcılar --------------------
+      function setStatus(message, type = "muted") {
+        dom.status.textContent = message;
+        dom.status.className = `status ${type}`;
+      }
+
+      function bindEvents() {
+        dom.clearBoardBtn.addEventListener("click", () => {
+          if (state.mode !== "editor") return;
+          emptyBoard();
+          updateFenOutput();
+          renderBoard();
+          setStatus("Tahta temizlendi.", "success");
+        });
+
+        dom.startPosBtn.addEventListener("click", () => {
+          if (state.mode !== "editor") return;
+          loadStartingPositionEditor();
+          setStatus("Başlangıç pozisyonu yüklendi.", "success");
+        });
+
+        dom.flipBtn.addEventListener("click", () => {
+          state.flipped = !state.flipped;
+          renderBoard();
+        });
+
+        dom.sideToMove.addEventListener("change", updateFenOutput);
+        [dom.castleK, dom.castleQ, dom.castlek, dom.castleq].forEach(el => el.addEventListener("change", updateFenOutput));
+
+        dom.startAnalysisBtn.addEventListener("click", startAnalysis);
+        dom.undoBtn.addEventListener("click", undoMove);
+        dom.resetBtn.addEventListener("click", resetToEditor);
+      }
+
+      function init() {
+        renderPiecePanel();
+        loadStartingPositionEditor();
+        bindEvents();
+        initEngine();
+      }
+
+      init();
+    })();
+  </script>
 </body>
 </html>
