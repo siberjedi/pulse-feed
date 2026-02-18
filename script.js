@@ -35,7 +35,7 @@
     },
     visualizer: { enabled: false, type: 'bar', color: '#5f87ff' },
     background: { mode: 'loop', color: '#040812', items: [] },
-    lyricLayout: { desktopScale: 1, mobileScale: 1.35, mobileFullWidth: false },
+    lyricLayout: { desktopScale: 1.2, mobileScale: 1.8, mobileFullWidth: false },
     lyrics: [],
     fonts: [],
   };
@@ -318,8 +318,8 @@
       if (el.applyAllTextColor) el.applyAllTextColor.value = baseStyle.textColor || '#ffffff';
       if (el.applyAllOutlineColor) el.applyAllOutlineColor.value = baseStyle.outlineColor || '#000000';
       if (el.applyAllOutlineWidth) el.applyAllOutlineWidth.value = String(Number.isFinite(baseStyle.outlineWidth) ? baseStyle.outlineWidth : 3);
-      if (el.desktopLyricScale) el.desktopLyricScale.value = String(state.config.lyricLayout?.desktopScale || 1);
-      if (el.mobileLyricScale) el.mobileLyricScale.value = String(state.config.lyricLayout?.mobileScale || 1.35);
+      if (el.desktopLyricScale) el.desktopLyricScale.value = String(state.config.lyricLayout?.desktopScale || 1.2);
+      if (el.mobileLyricScale) el.mobileLyricScale.value = String(state.config.lyricLayout?.mobileScale || 1.8);
       if (el.mobileFullWidthLyrics) el.mobileFullWidthLyrics.checked = !!state.config.lyricLayout?.mobileFullWidth;
 
       if (!state.config.lyrics.length) {
@@ -611,12 +611,12 @@
     });
 
     el.desktopLyricScale?.addEventListener('input', () => {
-      state.config.lyricLayout.desktopScale = Number(el.desktopLyricScale.value) || 1;
+      state.config.lyricLayout.desktopScale = Math.max(0.6, Math.min(12, Number(el.desktopLyricScale.value) || 1.2));
       markSaved('Desktop lyric boyutu kaydedildi');
     });
 
     el.mobileLyricScale?.addEventListener('input', () => {
-      state.config.lyricLayout.mobileScale = Number(el.mobileLyricScale.value) || 1.35;
+      state.config.lyricLayout.mobileScale = Math.max(0.6, Math.min(12, Number(el.mobileLyricScale.value) || 1.8));
       markSaved('Mobile lyric boyutu kaydedildi');
     });
 
@@ -901,7 +901,7 @@
     function fitLyric(text, fontFamily) {
       const zone = el.lyricsZone.getBoundingClientRect();
       const mobileMode = page === 'mobile';
-      const scale = mobileMode ? (state.config.lyricLayout?.mobileScale || 1.35) : (state.config.lyricLayout?.desktopScale || 1);
+      const scale = mobileMode ? (state.config.lyricLayout?.mobileScale || 1.8) : (state.config.lyricLayout?.desktopScale || 1.2);
       const maxW = zone.width * (mobileMode ? 0.97 : 0.96);
       const maxH = zone.height * (mobileMode ? 0.72 : 0.58);
       let size = Math.min(mobileMode ? 230 : 170, Math.floor(zone.height * (mobileMode ? 0.24 : 0.20)) * scale);
