@@ -408,9 +408,9 @@ body.recording-mode #seekBar {
   width: 100%;
   min-height: 100vh;
   display: grid;
-  place-items: start center;
+  place-items: center;
   padding: 10px;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .desktop-stage,
@@ -485,4 +485,6 @@ body.recording-mode #seekBar {
   .music-player { width: 560px; }
 }
 
-body.mobile-page { overflow: auto; }
+body.mobile-page { overflow: hidden; }
+
+body.desktop-page { overflow: hidden; }

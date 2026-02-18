@@ -35,7 +35,7 @@
     },
     visualizer: { enabled: false, type: 'bar', color: '#5f87ff' },
     background: { mode: 'loop', color: '#040812', items: [] },
-    lyricLayout: { desktopScale: 1.2, mobileScale: 1.8, mobileFullWidth: false },
+    lyricLayout: { desktopScale: 12, mobileScale: 12, mobileFullWidth: false },
     lyrics: [],
     fonts: [],
   };
@@ -318,8 +318,8 @@
       if (el.applyAllTextColor) el.applyAllTextColor.value = baseStyle.textColor || '#ffffff';
       if (el.applyAllOutlineColor) el.applyAllOutlineColor.value = baseStyle.outlineColor || '#000000';
       if (el.applyAllOutlineWidth) el.applyAllOutlineWidth.value = String(Number.isFinite(baseStyle.outlineWidth) ? baseStyle.outlineWidth : 3);
-      if (el.desktopLyricScale) el.desktopLyricScale.value = String(state.config.lyricLayout?.desktopScale || 1.2);
-      if (el.mobileLyricScale) el.mobileLyricScale.value = String(state.config.lyricLayout?.mobileScale || 1.8);
+      if (el.desktopLyricScale) el.desktopLyricScale.value = String(state.config.lyricLayout?.desktopScale || 12);
+      if (el.mobileLyricScale) el.mobileLyricScale.value = String(state.config.lyricLayout?.mobileScale || 12);
       if (el.mobileFullWidthLyrics) el.mobileFullWidthLyrics.checked = !!state.config.lyricLayout?.mobileFullWidth;
 
       if (!state.config.lyrics.length) {
@@ -611,12 +611,12 @@
     });
 
     el.desktopLyricScale?.addEventListener('input', () => {
-      state.config.lyricLayout.desktopScale = Math.max(0.6, Math.min(12, Number(el.desktopLyricScale.value) || 1.2));
+      state.config.lyricLayout.desktopScale = Math.max(12, Number(el.desktopLyricScale.value) || 12);
       markSaved('Desktop lyric boyutu kaydedildi');
     });
 
     el.mobileLyricScale?.addEventListener('input', () => {
-      state.config.lyricLayout.mobileScale = Math.max(0.6, Math.min(12, Number(el.mobileLyricScale.value) || 1.8));
+      state.config.lyricLayout.mobileScale = Math.max(12, Number(el.mobileLyricScale.value) || 12);
       markSaved('Mobile lyric boyutu kaydedildi');
     });
 
@@ -691,6 +691,7 @@
       duration: document.getElementById('duration'),
       audio: document.getElementById('audio'),
       recordBtn: document.getElementById('recordBtn'),
+      panelRecordBtn: document.getElementById('panelRecordBtn'),
       downloadRecord: document.getElementById('downloadRecord'),
       visualizerTop: document.getElementById('visualizerTop'),
       visualizerBottom: document.getElementById('visualizerBottom'),
@@ -707,8 +708,7 @@
       const vw = window.innerWidth - 20;
       const vh = window.innerHeight - 20;
       const fitScale = Math.max(0.05, Math.min(vw / targetStageSize.width, vh / targetStageSize.height));
-      const previewBoost = page === 'mobile' ? 2 : 1;
-      const scale = Math.max(0.05, fitScale * previewBoost);
+      const scale = Math.max(0.05, fitScale);
       el.feedStage.classList.add('scaled-stage');
       el.feedStage.style.setProperty('--stage-scale', String(scale));
       shell.style.width = `${Math.floor(targetStageSize.width * scale)}px`;
@@ -901,11 +901,11 @@
     function fitLyric(text, fontFamily) {
       const zone = el.lyricsZone.getBoundingClientRect();
       const mobileMode = page === 'mobile';
-      const scale = mobileMode ? (state.config.lyricLayout?.mobileScale || 1.8) : (state.config.lyricLayout?.desktopScale || 1.2);
-      const maxW = zone.width * (mobileMode ? 0.97 : 0.96);
-      const maxH = zone.height * (mobileMode ? 0.72 : 0.58);
-      let size = Math.min(mobileMode ? 230 : 170, Math.floor(zone.height * (mobileMode ? 0.24 : 0.20)) * scale);
-      const minSize = mobileMode ? 56 : 34;
+      const scale = mobileMode ? (state.config.lyricLayout?.mobileScale || 12) : (state.config.lyricLayout?.desktopScale || 12);
+      const maxW = zone.width * (mobileMode ? 0.98 : 0.97);
+      const maxH = zone.height * (mobileMode ? 0.75 : 0.62);
+      let size = Math.floor(zone.height * (mobileMode ? 0.24 : 0.20)) * scale;
+      const minSize = 12;
 
       el.lyricLine.style.fontFamily = fontFamily;
       el.lyricLine.style.whiteSpace = mobileMode ? 'normal' : 'nowrap';
@@ -988,7 +988,7 @@
       }
     }
 
-    async function startRecording() {
+    async function startRecording(panelOnly = false) {
       if (!navigator.mediaDevices?.getDisplayMedia || !window.MediaRecorder) {
         alert('Bu tarayıcı ekran kaydını desteklemiyor.');
         return;
@@ -1021,6 +1021,21 @@
           state.stream = null;
           alert('Lütfen kayıt için yalnızca tarayıcı sekmesini seçin (pencere/ekran değil).');
           return;
+        }
+
+        if (panelOnly) {
+          try {
+            if (!window.CropTarget || !videoTrack.cropTo) {
+              throw new Error('crop-api-missing');
+            }
+            const target = await window.CropTarget.fromElement(el.feedStage);
+            await videoTrack.cropTo(target);
+          } catch {
+            state.stream.getTracks().forEach((t) => t.stop());
+            state.stream = null;
+            alert('Bu tarayıcı panel-özel kaydı desteklemiyor. Normal kayıtı kullanabilirsiniz.');
+            return;
+          }
         }
 
         try {
@@ -1097,7 +1112,12 @@
 
     el.recordBtn.addEventListener('click', () => {
       if (state.mediaRecorder && state.mediaRecorder.state === 'recording') stopRecording();
-      else startRecording();
+      else startRecording(false);
+    });
+
+    el.panelRecordBtn?.addEventListener('click', () => {
+      if (state.mediaRecorder && state.mediaRecorder.state === 'recording') stopRecording();
+      else startRecording(true);
     });
 
     applyStageScale();
