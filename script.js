@@ -53,6 +53,7 @@
     stream: null,
     stopOnTapHandler: null,
     isRecording: false,
+    recordTarget: null,
   };
 
   function uid() {
@@ -257,6 +258,7 @@
       backgroundList: document.getElementById('backgroundList'),
       lyricsInput: document.getElementById('lyricsInput'),
       parseLyricsBtn: document.getElementById('parseLyricsBtn'),
+      clearLyricsBtn: document.getElementById('clearLyricsBtn'),
       applyAllEffect: document.getElementById('applyAllEffect'),
       applyAllFont: document.getElementById('applyAllFont'),
       applyAllTextColor: document.getElementById('applyAllTextColor'),
@@ -338,6 +340,7 @@
               </summary>
               <div class="lyric-edit-body">
                 <button type="button" data-edit-lyric="${line.id}">Metni Düzenle</button>
+                <button type="button" data-delete-lyric="${line.id}">Bu Lyric'i Sil</button>
                 <div class="grid two">
                   <label>Effect
                     <select data-line-effect="${line.id}">${effectOptions(line.effect || 'effect-fade')}</select>
@@ -505,17 +508,33 @@
       markSaved('Lyrics kaydedildi');
     });
 
+    el.clearLyricsBtn?.addEventListener('click', () => {
+      state.config.lyrics = [];
+      el.lyricsInput.value = '';
+      renderLyrics();
+      markSaved('Tüm lyricler silindi');
+    });
+
     el.lyricsTable.addEventListener('click', (event) => {
       const editBtn = event.target.closest('[data-edit-lyric]');
-      if (!editBtn) return;
-      const id = editBtn.getAttribute('data-edit-lyric');
-      const row = state.config.lyrics.find((x) => x.id === id);
-      if (!row) return;
-      const next = window.prompt('Yeni lyric', row.text);
-      if (next === null) return;
-      row.text = next.trim() || row.text;
+      if (editBtn) {
+        const id = editBtn.getAttribute('data-edit-lyric');
+        const row = state.config.lyrics.find((x) => x.id === id);
+        if (!row) return;
+        const next = window.prompt('Yeni lyric', row.text);
+        if (next === null) return;
+        row.text = next.trim() || row.text;
+        renderLyrics();
+        markSaved('Lyric güncellendi');
+        return;
+      }
+
+      const deleteBtn = event.target.closest('[data-delete-lyric]');
+      if (!deleteBtn) return;
+      const id = deleteBtn.getAttribute('data-delete-lyric');
+      state.config.lyrics = state.config.lyrics.filter((x) => x.id !== id);
       renderLyrics();
-      markSaved('Lyric güncellendi');
+      markSaved('Lyric silindi');
     });
 
     el.lyricsTable.addEventListener('change', (event) => {
@@ -904,7 +923,7 @@
       const scale = mobileMode ? (state.config.lyricLayout?.mobileScale || 12) : (state.config.lyricLayout?.desktopScale || 12);
       const maxW = zone.width * (mobileMode ? 0.98 : 0.97);
       const maxH = zone.height * (mobileMode ? 0.75 : 0.62);
-      let size = Math.floor(zone.height * (mobileMode ? 0.24 : 0.20)) * scale;
+      let size = Math.max(12, Number(scale) || 12);
       const minSize = 12;
 
       el.lyricLine.style.fontFamily = fontFamily;
@@ -913,10 +932,95 @@
       el.lyricLine.textContent = text;
       el.lyricLine.style.fontSize = `${size}px`;
 
-      while ((el.lyricLine.scrollWidth > maxW || el.lyricLine.scrollHeight > maxH) && size > minSize) {
-        size -= 2;
+      for (let i = 0; i < 24 && size > minSize; i += 1) {
+        const widthRatio = el.lyricLine.scrollWidth / Math.max(1, maxW);
+        const heightRatio = el.lyricLine.scrollHeight / Math.max(1, maxH);
+        const overflowRatio = Math.max(widthRatio, heightRatio);
+        if (overflowRatio <= 1.01) break;
+        const shrinkFactor = Math.min(4, overflowRatio + 0.05);
+        size = Math.max(minSize, Math.floor(size / shrinkFactor));
         el.lyricLine.style.fontSize = `${size}px`;
       }
+    }
+
+    function drawCoverFrame(ctx, source, targetW, targetH) {
+      const srcW = source.videoWidth || source.width;
+      const srcH = source.videoHeight || source.height;
+      if (!srcW || !srcH) {
+        ctx.clearRect(0, 0, targetW, targetH);
+        return;
+      }
+      const scale = Math.max(targetW / srcW, targetH / srcH);
+      const drawW = srcW * scale;
+      const drawH = srcH * scale;
+      const offsetX = (targetW - drawW) / 2;
+      const offsetY = (targetH - drawH) / 2;
+      ctx.clearRect(0, 0, targetW, targetH);
+      ctx.drawImage(source, offsetX, offsetY, drawW, drawH);
+    }
+
+    async function normalizeRecordingBlob(blob, width, height) {
+      const blobUrl = URL.createObjectURL(blob);
+      const playback = document.createElement('video');
+      playback.src = blobUrl;
+      playback.muted = true;
+      playback.playsInline = true;
+
+      await new Promise((resolve, reject) => {
+        playback.onloadedmetadata = () => resolve();
+        playback.onerror = () => reject(new Error('metadata-load-failed'));
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      const stream = canvas.captureStream(60);
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm';
+      const chunks = [];
+
+      const outputBlob = await new Promise(async (resolve, reject) => {
+        const recorder = new MediaRecorder(stream, {
+          mimeType,
+          videoBitsPerSecond: 100_000_000,
+        });
+
+        let raf = 0;
+        const draw = () => {
+          drawCoverFrame(ctx, playback, width, height);
+          if (!playback.paused && !playback.ended) {
+            raf = requestAnimationFrame(draw);
+          }
+        };
+
+        recorder.ondataavailable = (event) => {
+          if (event.data?.size) chunks.push(event.data);
+        };
+
+        recorder.onerror = () => {
+          cancelAnimationFrame(raf);
+          reject(new Error('normalize-recorder-failed'));
+        };
+
+        recorder.onstop = () => {
+          cancelAnimationFrame(raf);
+          resolve(new Blob(chunks, { type: 'video/webm' }));
+        };
+
+        playback.onended = () => {
+          if (recorder.state !== 'inactive') recorder.stop();
+        };
+
+        recorder.start(120);
+        await playback.play();
+        draw();
+      });
+
+      stream.getTracks().forEach((track) => track.stop());
+      URL.revokeObjectURL(blobUrl);
+      return outputBlob;
     }
 
     function activateLyric(line) {
@@ -1048,13 +1152,7 @@
           // browser may reject exact constraints depending on capture source
         }
 
-        const finalSettings = videoTrack?.getSettings?.() || {};
-        if ((finalSettings.width && finalSettings.width !== targetWidth) || (finalSettings.height && finalSettings.height !== targetHeight)) {
-          state.stream.getTracks().forEach((t) => t.stop());
-          state.stream = null;
-          alert(`Kayıt çözünürlüğü tam ${targetWidth}x${targetHeight} olmalı. Lütfen sekme paylaşımında çözünürlük seçimini kontrol edin.`);
-          return;
-        }
+        state.recordTarget = { width: targetWidth, height: targetHeight };
 
         state.chunks = [];
         const preferredMime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
@@ -1067,14 +1165,23 @@
         state.mediaRecorder.ondataavailable = (event) => {
           if (event.data?.size) state.chunks.push(event.data);
         };
-        state.mediaRecorder.onstop = () => {
-          const blob = new Blob(state.chunks, { type: 'video/webm' });
-          el.downloadRecord.href = URL.createObjectURL(blob);
+        state.mediaRecorder.onstop = async () => {
+          const rawBlob = new Blob(state.chunks, { type: 'video/webm' });
+          let finalBlob = rawBlob;
+          try {
+            const target = state.recordTarget || targetStageSize;
+            finalBlob = await normalizeRecordingBlob(rawBlob, target.width, target.height);
+          } catch {
+            alert('Kayıt alındı ancak yeniden boyutlandırma başarısız oldu. Ham kayıt indirilecek.');
+          }
+
+          el.downloadRecord.href = URL.createObjectURL(finalBlob);
           el.downloadRecord.classList.remove('hidden');
           el.recordBtn.textContent = '🎥 Fullscreen Kayda Başla';
           setRecordingUI(false);
           state.stream?.getTracks().forEach((t) => t.stop());
           state.stream = null;
+          state.recordTarget = null;
           if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
           applyModeVisibility();
         };
