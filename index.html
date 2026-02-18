@@ -344,11 +344,9 @@
         P: "♙", N: "♘", B: "♗", R: "♖", Q: "♕", K: "♔",
         p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚"
       };
-
       const PIECE_LIST = ["K", "Q", "R", "B", "N", "P", "k", "q", "r", "b", "n", "p"];
       const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
-      // Uygulama durumu
       const state = {
         mode: "editor",
         boardMap: {},
@@ -362,15 +360,14 @@
         flipped: false,
         chess: null,
         engine: null,
-        engineReady: false,
+        engineStatus: "init",
+        engineError: "",
         analysisDebounce: null,
-        lastFenForEngine: "",
         eval: { type: "cp", value: 0, text: "0.00" },
         bestMove: "-",
         pv: "-"
       };
 
-      // DOM referansları
       const dom = {
         board: document.getElementById("board"),
         piecePanel: document.getElementById("piecePanel"),
@@ -394,10 +391,9 @@
         queenWarning: document.getElementById("queenWarning")
       };
 
-      // -------------------- Tahta Çizimi Modülü --------------------
       function getDisplayRanksAndFiles() {
         const files = state.flipped ? [...FILES].reverse() : FILES;
-        const ranks = state.flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1];
+        const ranks = state.flipped ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1];
         return { files, ranks };
       }
 
@@ -423,15 +419,12 @@
       function renderBoard() {
         dom.board.innerHTML = "";
         const { files, ranks } = getDisplayRanksAndFiles();
-
         for (const rank of ranks) {
           for (const file of files) {
             const square = `${file}${rank}`;
             const squareEl = createSquareElement(square);
             const piece = getPieceAt(square);
-            if (piece) {
-              squareEl.querySelector(".piece").textContent = PIECE_UNICODE[piece];
-            }
+            if (piece) squareEl.querySelector(".piece").textContent = PIECE_UNICODE[piece];
 
             if (file === files[files.length - 1]) {
               const rankTag = document.createElement("span");
@@ -439,7 +432,6 @@
               rankTag.textContent = rank;
               squareEl.appendChild(rankTag);
             }
-
             if (rank === ranks[ranks.length - 1]) {
               const fileTag = document.createElement("span");
               fileTag.className = "coord file";
@@ -477,32 +469,15 @@
         if (state.threatenedPieces.has(square)) squareEl.classList.add("threatened-piece");
       }
 
-      // -------------------- Editör Modülü --------------------
-      function emptyBoard() {
-        state.boardMap = {};
-      }
-
-      function setPieceAt(square, piece) {
-        if (!piece) {
-          delete state.boardMap[square];
-          return;
-        }
-        state.boardMap[square] = piece;
-      }
-
+      function emptyBoard() { state.boardMap = {}; }
+      function setPieceAt(square, piece) { if (!piece) delete state.boardMap[square]; else state.boardMap[square] = piece; }
       function getPieceAt(square) {
         if (state.mode === "analysis" && state.chess) {
-          const piece = state.chess.get(square);
-          if (!piece) return null;
-          const symbol = piece.type;
-          return piece.color === "w" ? symbol.toUpperCase() : symbol;
+          const p = state.chess.get(square);
+          if (!p) return null;
+          return p.color === "w" ? p.type.toUpperCase() : p.type;
         }
         return state.boardMap[square] || null;
-      }
-
-      function loadStartingPositionEditor() {
-        const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        loadFenToEditor(startFen);
       }
 
       function loadFenToEditor(fen) {
@@ -512,15 +487,12 @@
         const castling = parts[2] || "-";
 
         emptyBoard();
-        const ranks = placement.split("/");
-        ranks.forEach((row, rIndex) => {
+        placement.split("/").forEach((row, rIdx) => {
           let fileIdx = 0;
-          for (const char of row) {
-            if (/\d/.test(char)) {
-              fileIdx += Number(char);
-            } else {
-              const square = `${FILES[fileIdx]}${8 - rIndex}`;
-              setPieceAt(square, char);
+          for (const ch of row) {
+            if (/\d/.test(ch)) fileIdx += Number(ch);
+            else {
+              setPieceAt(`${FILES[fileIdx]}${8 - rIdx}`, ch);
               fileIdx += 1;
             }
           }
@@ -537,87 +509,65 @@
         renderBoard();
       }
 
+      function loadStartingPositionEditor() {
+        loadFenToEditor("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+      }
+
       function buildFenFromEditor() {
         const rows = [];
         for (let rank = 8; rank >= 1; rank--) {
           let row = "";
-          let emptyCount = 0;
+          let empty = 0;
           for (const file of FILES) {
             const piece = state.boardMap[`${file}${rank}`];
-            if (piece) {
-              if (emptyCount > 0) {
-                row += emptyCount;
-                emptyCount = 0;
-              }
+            if (!piece) empty += 1;
+            else {
+              if (empty) { row += empty; empty = 0; }
               row += piece;
-            } else {
-              emptyCount += 1;
             }
           }
-          if (emptyCount > 0) row += emptyCount;
+          if (empty) row += empty;
           rows.push(row);
         }
-
         const side = dom.sideToMove.value;
-        const castling = [
-          dom.castleK.checked ? "K" : "",
-          dom.castleQ.checked ? "Q" : "",
-          dom.castlek.checked ? "k" : "",
-          dom.castleq.checked ? "q" : ""
-        ].join("") || "-";
-
+        const castling = [dom.castleK.checked ? "K" : "", dom.castleQ.checked ? "Q" : "", dom.castlek.checked ? "k" : "", dom.castleq.checked ? "q" : ""].join("") || "-";
         return `${rows.join("/")} ${side} ${castling} - 0 1`;
       }
 
       function validateKingsForAnalysis() {
-        let whiteKings = 0;
-        let blackKings = 0;
+        let wk = 0, bk = 0;
         for (const piece of Object.values(state.boardMap)) {
-          if (piece === "K") whiteKings += 1;
-          if (piece === "k") blackKings += 1;
+          if (piece === "K") wk += 1;
+          if (piece === "k") bk += 1;
         }
-
-        if (whiteKings !== 1) {
-          return { ok: false, message: whiteKings === 0 ? "Analiz için beyaz şah gerekli." : "Analiz için yalnızca bir beyaz şah olmalı." };
-        }
-        if (blackKings !== 1) {
-          return { ok: false, message: blackKings === 0 ? "Analiz için siyah şah gerekli." : "Analiz için yalnızca bir siyah şah olmalı." };
-        }
+        if (wk !== 1) return { ok: false, message: wk === 0 ? "Analiz için beyaz şah gerekli." : "Analiz için yalnızca bir beyaz şah olmalı." };
+        if (bk !== 1) return { ok: false, message: bk === 0 ? "Analiz için siyah şah gerekli." : "Analiz için yalnızca bir siyah şah olmalı." };
         return { ok: true, message: "" };
       }
 
       function updateFenOutput() {
-        if (state.mode === "analysis" && state.chess) {
-          dom.fenOutput.textContent = state.chess.fen();
-          return;
-        }
-        dom.fenOutput.textContent = buildFenFromEditor();
+        dom.fenOutput.textContent = state.mode === "analysis" && state.chess ? state.chess.fen() : buildFenFromEditor();
       }
 
-      // -------------------- Oyun Modülü --------------------
       function startAnalysis() {
-        const validation = validateKingsForAnalysis();
-        if (!validation.ok) {
-          setStatus(validation.message, "error");
+        if (state.engineStatus !== "ready") {
+          setStatus(state.engineError || "Motor henüz hazır değil. Lütfen bekleyin.", "error");
           return;
         }
 
-        const fen = buildFenFromEditor();
+        const validation = validateKingsForAnalysis();
+        if (!validation.ok) return setStatus(validation.message, "error");
+
         const chess = new Chess();
-        const loaded = chess.load(fen);
-        if (!loaded) {
-          setStatus("Geçersiz FEN üretildi. Tahtayı kontrol edin.", "error");
-          return;
-        }
+        if (!chess.load(buildFenFromEditor())) return setStatus("Geçersiz FEN üretildi. Tahtayı kontrol edin.", "error");
 
         state.mode = "analysis";
         state.chess = chess;
         state.selectedSquare = null;
         state.legalMoves = [];
-
         dom.undoBtn.disabled = false;
         dom.resetBtn.disabled = false;
-        setStatus("Analiz modu aktif. Taşları sürüklemeden tıklayarak oynayın.", "success");
+        setStatus("Analiz modu aktif. Her iki tarafın taşlarıyla hamle deneyebilirsiniz.", "success");
 
         updateFenOutput();
         computeAllOverlays();
@@ -646,7 +596,6 @@
           renderBoard();
           return;
         }
-
         handleAnalysisSquareClick(square);
       }
 
@@ -661,11 +610,9 @@
         if (!state.chess) return;
 
         if (!state.selectedSquare) {
-          const piece = state.chess.get(square);
-          if (!piece || piece.color !== state.chess.turn()) return;
-
+          if (!state.chess.get(square)) return;
           state.selectedSquare = square;
-          state.legalMoves = state.chess.moves({ square, verbose: true }).map(m => m.to);
+          state.legalMoves = getLegalMovesFromSquareAnyTurn(square).map(m => m.to);
           renderBoard();
           return;
         }
@@ -677,12 +624,11 @@
           return;
         }
 
-        const moveResult = state.chess.move({ from: state.selectedSquare, to: square, promotion: "q" });
-        if (!moveResult) {
-          const piece = state.chess.get(square);
-          if (piece && piece.color === state.chess.turn()) {
+        const moved = tryMoveAnyTurn(state.selectedSquare, square);
+        if (!moved) {
+          if (state.chess.get(square)) {
             state.selectedSquare = square;
-            state.legalMoves = state.chess.moves({ square, verbose: true }).map(m => m.to);
+            state.legalMoves = getLegalMovesFromSquareAnyTurn(square).map(m => m.to);
           } else {
             state.selectedSquare = null;
             state.legalMoves = [];
@@ -702,10 +648,7 @@
       function undoMove() {
         if (!state.chess) return;
         const undone = state.chess.undo();
-        if (!undone) {
-          setStatus("Geri alınacak hamle yok.", "error");
-          return;
-        }
+        if (!undone) return setStatus("Geri alınacak hamle yok.", "error");
         state.selectedSquare = null;
         state.legalMoves = [];
         updateFenOutput();
@@ -715,7 +658,35 @@
         setStatus("Son hamle geri alındı.", "success");
       }
 
-      // -------------------- Overlay Modülü --------------------
+      function withTurnInFen(fen, turn) {
+        const parts = fen.trim().split(/\s+/);
+        parts[1] = turn;
+        return parts.join(" ");
+      }
+
+      function tryMoveAnyTurn(from, to) {
+        const piece = state.chess.get(from);
+        if (!piece) return null;
+        const originalFen = state.chess.fen();
+        if (state.chess.turn() !== piece.color) {
+          if (!state.chess.load(withTurnInFen(originalFen, piece.color))) return null;
+        }
+        const move = state.chess.move({ from, to, promotion: "q" });
+        if (!move) {
+          state.chess.load(originalFen);
+          return null;
+        }
+        return move;
+      }
+
+      function getLegalMovesFromSquareAnyTurn(square) {
+        const piece = state.chess.get(square);
+        if (!piece) return [];
+        const temp = new Chess();
+        temp.load(withTurnInFen(state.chess.fen(), piece.color));
+        return temp.moves({ square, verbose: true });
+      }
+
       function resetOverlays() {
         state.attackedSquares = new Set();
         state.safeKingSquares = new Set();
@@ -728,32 +699,24 @@
         resetOverlays();
         if (!state.chess) return;
 
-        const opponent = state.chess.turn() === "w" ? "b" : "w";
+        const turnColor = state.chess.turn();
+        const opponent = turnColor === "w" ? "b" : "w";
 
         for (let rank = 1; rank <= 8; rank++) {
           for (const file of FILES) {
             const square = `${file}${rank}`;
-            if (isSquareAttackedByColor(square, opponent)) {
-              state.attackedSquares.add(square);
-            }
+            if (isSquareAttackedByColor(square, opponent)) state.attackedSquares.add(square);
           }
         }
 
-        const turnColor = state.chess.turn();
-        const ownSquares = getSquaresByColor(turnColor);
-        for (const square of ownSquares) {
-          if (isSquareAttackedByColor(square, opponent)) {
-            state.threatenedPieces.add(square);
-          }
+        for (const square of getSquaresByColor(turnColor)) {
+          if (isSquareAttackedByColor(square, opponent)) state.threatenedPieces.add(square);
         }
 
         const kingSquare = findKingSquare(turnColor);
         if (kingSquare) {
-          const kingMoves = state.chess.moves({ square: kingSquare, verbose: true }).map(m => m.to);
-          for (const to of kingMoves) {
-            if (!isSquareAttackedByColor(to, opponent)) {
-              state.safeKingSquares.add(to);
-            }
+          for (const move of getLegalMovesFromSquareAnyTurn(kingSquare)) {
+            if (!isSquareAttackedByColor(move.to, opponent)) state.safeKingSquares.add(move.to);
           }
         }
 
@@ -766,104 +729,70 @@
       }
 
       function isSquareAttackedByColor(targetSquare, attackerColor) {
-        if (!state.chess) return false;
-        const moves = state.chess.moves({ verbose: true });
-        return moves.some(move => move.color === attackerColor && move.to === targetSquare);
+        const temp = new Chess();
+        if (!temp.load(withTurnInFen(state.chess.fen(), attackerColor))) return false;
+        return temp.moves({ verbose: true }).some(m => m.to === targetSquare);
       }
 
       function getSquaresByColor(color) {
         const list = [];
         for (let rank = 1; rank <= 8; rank++) {
           for (const file of FILES) {
-            const square = `${file}${rank}`;
-            const piece = state.chess.get(square);
-            if (piece && piece.color === color) list.push(square);
+            const sq = `${file}${rank}`;
+            const piece = state.chess.get(sq);
+            if (piece && piece.color === color) list.push(sq);
           }
         }
         return list;
       }
 
-      function findKingSquare(color) {
-        const squares = getSquaresByColor(color);
-        return squares.find(square => {
-          const p = state.chess.get(square);
-          return p && p.type === "k";
-        }) || null;
-      }
+      function findKingSquare(color) { return getSquaresByColor(color).find(s => state.chess.get(s)?.type === "k") || null; }
+      function findQueenSquare(color) { return getSquaresByColor(color).find(s => state.chess.get(s)?.type === "q") || null; }
+      function updateQueenWarning() { dom.queenWarning.textContent = state.queenWarning || "Vezir tehdidi yok."; }
 
-      function findQueenSquare(color) {
-        const squares = getSquaresByColor(color);
-        return squares.find(square => {
-          const p = state.chess.get(square);
-          return p && p.type === "q";
-        }) || null;
-      }
-
-      function updateQueenWarning() {
-        dom.queenWarning.textContent = state.queenWarning || "Vezir tehdidi yok.";
-      }
-
-      // -------------------- Motor İletişim Modülü --------------------
       function initEngine() {
-        try {
-          state.engine = new Worker("https://cdn.jsdelivr.net/npm/stockfish@16.0.0/src/stockfish.js");
-        } catch (error) {
-          setStatus("Stockfish worker başlatılamadı.", "error");
-          return;
-        }
+        state.engineStatus = "loading";
+        dom.startAnalysisBtn.disabled = true;
 
+        try { state.engine = new Worker("stockfish.js"); }
+        catch { return engineFailed("Stockfish worker başlatılamadı. stockfish.js dosyasını kontrol edin."); }
+
+        state.engine.onerror = () => engineFailed("Motor hatası oluştu. stockfish.js yüklenemedi veya çalıştırılamadı.");
         state.engine.onmessage = (event) => {
-          const line = typeof event.data === "string" ? event.data : "";
-          parseEngineLine(line);
+          const raw = typeof event.data === "string" ? event.data : "";
+          raw.split(/\r?\n/).forEach(parseEngineLine);
         };
 
         state.engine.postMessage("uci");
         state.engine.postMessage("isready");
       }
 
-      function queueEngineAnalysis() {
-        if (!state.engine || !state.chess) return;
-        const fen = state.chess.fen();
-        state.lastFenForEngine = fen;
-
-        if (state.analysisDebounce) clearTimeout(state.analysisDebounce);
-        state.analysisDebounce = setTimeout(() => {
-          if (!state.engineReady) {
-            state.engine.postMessage("isready");
-          }
-          state.engine.postMessage("stop");
-          state.engine.postMessage(`position fen ${fen}`);
-          state.engine.postMessage("go depth 18");
-        }, 500);
+      function engineFailed(message) {
+        state.engineStatus = "error";
+        state.engineError = message;
+        dom.startAnalysisBtn.disabled = true;
+        setStatus(message, "error");
       }
 
       function parseEngineLine(line) {
         if (!line) return;
 
         if (line === "readyok") {
-          state.engineReady = true;
+          state.engineStatus = "ready";
+          state.engineError = "";
+          dom.startAnalysisBtn.disabled = false;
+          if (state.mode === "editor") setStatus("Motor hazır. Analizi başlatabilirsiniz.", "success");
           return;
         }
 
-        if (line.startsWith("info")) {
-          const depthMatch = line.match(/\bdepth\s+(\d+)/);
-          const depth = depthMatch ? Number(depthMatch[1]) : 0;
-          if (depth < 1) return;
+        if (line.startsWith("info ")) {
+          const mate = line.match(/\bscore\s+mate\s+(-?\d+)/);
+          const cp = line.match(/\bscore\s+cp\s+(-?\d+)/);
+          const pv = line.match(/\bpv\s+(.+)$/);
 
-          const mateMatch = line.match(/\bscore\s+mate\s+(-?\d+)/);
-          const cpMatch = line.match(/\bscore\s+cp\s+(-?\d+)/);
-          const pvMatch = line.match(/\bpv\s+(.+)$/);
-
-          if (mateMatch) {
-            state.eval = { type: "mate", value: Number(mateMatch[1]), text: `#${mateMatch[1]}` };
-          } else if (cpMatch) {
-            const cp = Number(cpMatch[1]);
-            state.eval = { type: "cp", value: cp, text: (cp / 100).toFixed(2) };
-          }
-
-          if (pvMatch) {
-            state.pv = pvMatch[1].trim();
-          }
+          if (mate) state.eval = { type: "mate", value: Number(mate[1]), text: `#${mate[1]}` };
+          else if (cp) state.eval = { type: "cp", value: Number(cp[1]), text: (Number(cp[1]) / 100).toFixed(2) };
+          if (pv) state.pv = pv[1].trim();
 
           updateEvalUI();
           return;
@@ -876,23 +805,30 @@
         }
       }
 
+      function queueEngineAnalysis() {
+        if (!state.engine || !state.chess || state.engineStatus !== "ready") return;
+        if (state.analysisDebounce) clearTimeout(state.analysisDebounce);
+        state.analysisDebounce = setTimeout(() => {
+          const fen = state.chess.fen();
+          state.engine.postMessage("stop");
+          state.engine.postMessage(`position fen ${fen}`);
+          state.engine.postMessage("go depth 18");
+        }, 500);
+      }
+
       function updateEvalUI() {
         dom.evalText.textContent = state.eval.text;
         dom.pvLine.textContent = state.pv;
 
-        let whiteAdvantage = 0.5;
-        if (state.eval.type === "mate") {
-          whiteAdvantage = state.eval.value > 0 ? 1 : 0;
-        } else {
+        let whiteAdv = 0.5;
+        if (state.eval.type === "mate") whiteAdv = state.eval.value > 0 ? 1 : 0;
+        else {
           const cp = Math.max(-1200, Math.min(1200, state.eval.value));
-          whiteAdvantage = 0.5 + (Math.tanh(cp / 350) / 2);
+          whiteAdv = 0.5 + (Math.tanh(cp / 350) / 2);
         }
-
-        const whitePercent = Math.max(0, Math.min(1, whiteAdvantage));
-        dom.evalFill.style.height = `${(whitePercent * 100).toFixed(1)}%`;
+        dom.evalFill.style.height = `${(Math.max(0, Math.min(1, whiteAdv)) * 100).toFixed(1)}%`;
       }
 
-      // -------------------- Yardımcılar --------------------
       function setStatus(message, type = "muted") {
         dom.status.textContent = message;
         dom.status.className = `status ${type}`;
@@ -936,5 +872,6 @@
       init();
     })();
   </script>
+
 </body>
 </html>
