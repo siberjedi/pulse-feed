@@ -35,6 +35,7 @@
     },
     visualizer: { enabled: false, type: 'bar', color: '#5f87ff' },
     background: { mode: 'loop', color: '#040812', items: [] },
+    recording: { fps: 60, bitrateMbps: 80 },
     lyricLayout: { desktopScale: 12, mobileScale: 12, mobileFullWidth: false },
     lyrics: [],
     fonts: [],
@@ -74,6 +75,7 @@
           ...(raw.background || {}),
           items: Array.isArray(raw.background?.items) ? raw.background.items : [],
         },
+        recording: { ...defaultConfig.recording, ...(raw.recording || {}) },
         lyricLayout: { ...defaultConfig.lyricLayout, ...(raw.lyricLayout || {}) },
         lyrics: Array.isArray(raw.lyrics) ? raw.lyrics : [],
         fonts: Array.isArray(raw.fonts) ? raw.fonts : [],
@@ -270,6 +272,8 @@
       lyricsTable: document.getElementById('lyricsTable'),
       fontFiles: document.getElementById('fontFiles'),
       fontPreviewList: document.getElementById('fontPreviewList'),
+      recordFps: document.getElementById('recordFps'),
+      recordBitrateMbps: document.getElementById('recordBitrateMbps'),
       saveAllBtn: document.getElementById('saveAllBtn'),
       saveStatus: document.getElementById('saveStatus'),
     };
@@ -384,6 +388,11 @@
         .join('');
     }
 
+    function renderRecording() {
+      if (el.recordFps) el.recordFps.value = String(Math.max(12, Math.min(120, Number(state.config.recording?.fps) || 60)));
+      if (el.recordBitrateMbps) el.recordBitrateMbps.value = String(Math.max(4, Math.min(120, Number(state.config.recording?.bitrateMbps) || 80)));
+    }
+
     function renderAll() {
       mountFontFaces();
       renderSong();
@@ -391,6 +400,7 @@
       renderBackground();
       renderLyrics();
       renderFonts();
+      renderRecording();
     }
 
     el.songFile.addEventListener('change', async () => {
@@ -644,6 +654,16 @@
       markSaved('Mobil tam genişlik lyric ayarı kaydedildi');
     });
 
+    el.recordFps?.addEventListener('input', () => {
+      state.config.recording.fps = Math.max(12, Math.min(120, Number(el.recordFps.value) || 60));
+      markSaved('Kayıt FPS ayarı kaydedildi');
+    });
+
+    el.recordBitrateMbps?.addEventListener('input', () => {
+      state.config.recording.bitrateMbps = Math.max(4, Math.min(120, Number(el.recordBitrateMbps.value) || 80));
+      markSaved('Kayıt bitrate ayarı kaydedildi');
+    });
+
     el.fontFiles.addEventListener('change', async () => {
       const files = Array.from(el.fontFiles.files || []);
       if (!files.length) return;
@@ -721,6 +741,13 @@
 
     const targetStageSize = page === 'mobile' ? { width: 2160, height: 3840 } : { width: 3840, height: 2160 };
     el.feedStage.dataset.targetResolution = `${targetStageSize.width}x${targetStageSize.height}`;
+
+    function getRecordingPrefs() {
+      const fps = Math.max(12, Math.min(120, Number(state.config.recording?.fps) || 60));
+      const bitrateMbps = Math.max(4, Math.min(120, Number(state.config.recording?.bitrateMbps) || 80));
+      const bitrate = Math.round(bitrateMbps * 1_000_000);
+      return { fps, bitrate };
+    }
 
     function applyStageScale() {
       const shell = el.feedStage.parentElement;
@@ -946,6 +973,7 @@
     }
 
     async function normalizeRecordingBlob(blob, width, height) {
+      const { fps, bitrate } = getRecordingPrefs();
       const blobUrl = URL.createObjectURL(blob);
       const playback = document.createElement('video');
       playback.src = blobUrl;
@@ -961,7 +989,7 @@
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-      const stream = canvas.captureStream(60);
+      const stream = canvas.captureStream(fps);
       const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
         ? 'video/webm;codecs=vp9'
         : 'video/webm';
@@ -970,7 +998,7 @@
       const outputBlob = await new Promise(async (resolve, reject) => {
         const recorder = new MediaRecorder(stream, {
           mimeType,
-          videoBitsPerSecond: 100_000_000,
+          videoBitsPerSecond: bitrate,
         });
 
         let raf = 0;
@@ -1093,7 +1121,7 @@
           video: {
             displaySurface: 'browser',
             cursor: 'never',
-            frameRate: { ideal: 60, max: 60 },
+            frameRate: { ideal: getRecordingPrefs().fps, max: getRecordingPrefs().fps },
             width: { ideal: targetWidth, max: targetWidth },
             height: { ideal: targetHeight, max: targetHeight },
             aspectRatio: { ideal: targetWidth / targetHeight },
@@ -1132,7 +1160,7 @@
           await videoTrack.applyConstraints({
             width: { exact: targetWidth },
             height: { exact: targetHeight },
-            frameRate: { ideal: 60, max: 60 },
+            frameRate: { ideal: getRecordingPrefs().fps, max: getRecordingPrefs().fps },
           });
         } catch {
           // browser may reject exact constraints depending on capture source
@@ -1146,7 +1174,7 @@
           : 'video/webm';
         state.mediaRecorder = new MediaRecorder(state.stream, {
           mimeType: preferredMime,
-          videoBitsPerSecond: 80_000_000,
+          videoBitsPerSecond: getRecordingPrefs().bitrate,
         });
         state.mediaRecorder.ondataavailable = (event) => {
           if (event.data?.size) state.chunks.push(event.data);
