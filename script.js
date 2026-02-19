@@ -13,7 +13,7 @@
 
   const state = {
     posts: [], suggestions: [], tracks: [], currentTrackId: '',
-    autoScroll: false, speedPxPerSecond: 34, lastTime: performance.now(),
+    autoScroll: page === 'mobile', speedPxPerSecond: 34, lastTime: performance.now(),
     timelineEvents: [], timelineIndex: 0, lastTrackTime: 0,
     visiblePostIds: [], visibleComments: {}, typingComments: {}, activeCommentFlows: {},
     nickPool: [],
@@ -384,34 +384,31 @@
     state.timelineIndex = 0;
   }
 
-  function centerPost(postId) {
-    if (!isTimelinePage || !el.feed) return;
-    const node = el.feed.querySelector(`[data-post-id="${postId}"]`);
-    if (!node) return;
+  function centerNodeInFeed(node) {
+    if (!isTimelinePage || !el.feed || !node) return;
+    if (page === 'mobile') {
+      const feedRect = el.feed.getBoundingClientRect();
+      const nodeRect = node.getBoundingClientRect();
+      const current = el.feed.scrollTop;
+      const delta = (nodeRect.top - feedRect.top) - ((feedRect.height / 2) - (nodeRect.height / 2));
+      el.feed.scrollTo({ top: Math.max(0, current + delta), behavior: 'smooth' });
+      return;
+    }
     const rect = node.getBoundingClientRect();
     const delta = rect.top - ((window.innerHeight / 2) - (rect.height / 2));
-    window.scrollBy({ top: delta, behavior: 'auto' });
+    window.scrollBy({ top: delta, behavior: 'smooth' });
   }
 
-  function alignPostTop(postId) {
+  function centerPost(postId) {
     if (!isTimelinePage || !el.feed) return;
-    const node = el.feed.querySelector(`[data-post-id="${postId}"]`);
-    if (!node) return;
-    const rect = node.getBoundingClientRect();
-    window.scrollBy({ top: rect.top, behavior: 'auto' });
+    centerNodeInFeed(el.feed.querySelector(`[data-post-id="${postId}"]`));
   }
 
-  function alignCommentWithBottomBuffer(postId, commentId) {
+  function centerComment(postId, commentId) {
     if (!isTimelinePage || !el.feed || !commentId) return;
     const postNode = el.feed.querySelector(`[data-post-id="${postId}"]`);
-    if (!postNode) return;
-    const commentNode = postNode.querySelector(`[data-comment-id="${commentId}"]`);
-    if (!commentNode) return;
-    const rect = commentNode.getBoundingClientRect();
-    const reserve = Math.max(rect.height * 5, 220);
-    const targetTop = Math.max(30, window.innerHeight - reserve - rect.height);
-    const delta = rect.top - targetTop;
-    window.scrollBy({ top: delta, behavior: 'auto' });
+    const commentNode = postNode?.querySelector(`[data-comment-id="${commentId}"]`);
+    centerNodeInFeed(commentNode || postNode);
   }
 
   let overlayTimer = 0;
@@ -484,7 +481,7 @@
     if (ev.kind === 'post') {
       if (!state.visiblePostIds.includes(ev.post.id)) state.visiblePostIds.push(ev.post.id);
       refresh();
-      alignPostTop(ev.post.id);
+      centerPost(ev.post.id);
 
       if (ev.post.boosted) {
         if (!state.activeBoostIds) state.activeBoostIds = [];
@@ -514,14 +511,14 @@
       }
 
       refresh();
-      alignCommentWithBottomBuffer(ev.post.id, ev.comment.id);
+      centerComment(ev.post.id, ev.comment.id);
       return;
     }
 
     if (ev.kind === 'carousel') {
       if (!state.visiblePostIds.includes(ev.post.id)) state.visiblePostIds.push(ev.post.id);
       refresh();
-      alignPostTop(ev.post.id);
+      centerPost(ev.post.id);
     }
   }
 
@@ -547,7 +544,71 @@
 
   let recorder = null;
   let recordStream = null;
+  let recordOutputStream = null;
+  let recordPreviewVideo = null;
+  let recordCanvas = null;
+  let recordRaf = 0;
   let recordedChunks = [];
+
+  function stopRecordPipeline() {
+    if (recordRaf) cancelAnimationFrame(recordRaf);
+    recordRaf = 0;
+    if (recordPreviewVideo) {
+      recordPreviewVideo.pause();
+      recordPreviewVideo.srcObject = null;
+      recordPreviewVideo.remove();
+      recordPreviewVideo = null;
+    }
+    recordOutputStream?.getTracks().forEach((tr) => tr.stop());
+    recordOutputStream = null;
+    recordCanvas = null;
+  }
+
+  async function buildCentered4kStream() {
+    const source = recordStream;
+    if (!source) return null;
+
+    recordPreviewVideo = document.createElement('video');
+    recordPreviewVideo.muted = true;
+    recordPreviewVideo.playsInline = true;
+    recordPreviewVideo.srcObject = source;
+    await recordPreviewVideo.play();
+
+    recordCanvas = document.createElement('canvas');
+    recordCanvas.width = 2160;
+    recordCanvas.height = 3840;
+    const ctx = recordCanvas.getContext('2d');
+    if (!ctx) return null;
+
+    const drawFrame = () => {
+      const srcW = recordPreviewVideo.videoWidth || 1;
+      const srcH = recordPreviewVideo.videoHeight || 1;
+      const targetRect = (page === 'mobile' ? document.getElementById('mobileCaptureRegion') : el.feed)?.getBoundingClientRect();
+      const viewportW = window.innerWidth || 1;
+      const viewportH = window.innerHeight || 1;
+      const sxScale = srcW / viewportW;
+      const syScale = srcH / viewportH;
+
+      let sx = 0;
+      let sy = 0;
+      let sw = srcW;
+      let sh = srcH;
+
+      if (targetRect && targetRect.width > 1 && targetRect.height > 1) {
+        sx = Math.max(0, targetRect.left * sxScale);
+        sy = Math.max(0, targetRect.top * syScale);
+        sw = Math.min(srcW - sx, Math.max(1, targetRect.width * sxScale));
+        sh = Math.min(srcH - sy, Math.max(1, targetRect.height * syScale));
+      }
+
+      ctx.clearRect(0, 0, 2160, 3840);
+      ctx.drawImage(recordPreviewVideo, sx, sy, sw, sh, 0, 0, 2160, 3840);
+      recordRaf = requestAnimationFrame(drawFrame);
+    };
+
+    drawFrame();
+    return recordCanvas.captureStream(60);
+  }
 
   async function startRecording(silentFail = false) {
     if (!isTimelinePage) return false;
@@ -566,7 +627,8 @@
         surfaceSwitching: 'exclude',
         monitorTypeSurfaces: 'exclude',
       });
-      recorder = new MediaRecorder(recordStream, { mimeType: 'video/webm;codecs=vp9' });
+      recordOutputStream = await buildCentered4kStream();
+      recorder = new MediaRecorder(recordOutputStream || recordStream, { mimeType: 'video/webm;codecs=vp9' });
       recordedChunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
       recorder.onstop = () => {
@@ -575,6 +637,7 @@
         a.href = URL.createObjectURL(blob);
         a.download = `pulse-feed-${Date.now()}.webm`;
         a.click();
+        stopRecordPipeline();
         recordStream?.getTracks().forEach((tr) => tr.stop());
         recordStream = null;
         recorder = null;
@@ -584,6 +647,9 @@
       if (el.recordToggleBtn) el.recordToggleBtn.textContent = '■ Stop';
       return true;
     } catch {
+      stopRecordPipeline();
+      recordStream?.getTracks().forEach((tr) => tr.stop());
+      recordStream = null;
       if (!silentFail) alert('Kayıt başlatılamadı. Tarayıcı güvenlik nedeniyle seçim ister.');
       return false;
     }
@@ -882,7 +948,8 @@
     if (isTimelinePage) {
       if (state.autoScroll) {
         const delta = (now - state.lastTime) / 1000;
-        window.scrollBy(0, state.speedPxPerSecond * delta);
+        if (page === 'mobile' && el.feed) el.feed.scrollBy(0, state.speedPxPerSecond * delta);
+        else window.scrollBy(0, state.speedPxPerSecond * delta);
       }
       if (!state.lastBoostAt) state.lastBoostAt = now;
       if (now - state.lastBoostAt > 650) {
@@ -985,6 +1052,7 @@
     bind();
     initVisualizer();
     initAudio();
+    if (page === 'mobile') state.autoScroll = true;
     if (state.currentTrackId) applyTrack(state.currentTrackId);
     requestAnimationFrame(tick);
   }
