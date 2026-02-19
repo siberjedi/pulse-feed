@@ -585,6 +585,7 @@
   let recordCanvas = null;
   let recordRaf = 0;
   let recordClickStopArmed = false;
+  let recordStopTapAllowedAt = 0;
   let recordedChunks = [];
 
   function stopRecordPipeline() {
@@ -683,6 +684,7 @@
       };
       recorder.start(250);
       recordClickStopArmed = false;
+      recordStopTapAllowedAt = performance.now() + 2500;
       window.setTimeout(() => { recordClickStopArmed = true; }, 450);
       if (el.recordToggleBtn) el.recordToggleBtn.textContent = '■ Stop';
       return true;
@@ -976,6 +978,7 @@
     if (page === 'mobile') {
       const stopOnTap = (e) => {
         if (!recordClickStopArmed || !recorder) return;
+        if (performance.now() < recordStopTapAllowedAt) return;
         const region = document.getElementById('mobileCaptureRegion');
         if (!region || !region.contains(e.target)) return;
         stopRecording();
