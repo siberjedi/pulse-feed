@@ -584,6 +584,7 @@
   let recordPreviewVideo = null;
   let recordCanvas = null;
   let recordRaf = 0;
+  let recordLastFrameAt = 0;
   let recordClickStopArmed = false;
   let recordStopTapAllowedAt = 0;
   let recordedChunks = [];
@@ -591,6 +592,7 @@
   function stopRecordPipeline() {
     if (recordRaf) cancelAnimationFrame(recordRaf);
     recordRaf = 0;
+    recordLastFrameAt = 0;
     if (recordPreviewVideo) {
       recordPreviewVideo.pause();
       recordPreviewVideo.srcObject = null;
@@ -618,34 +620,42 @@
     const ctx = recordCanvas.getContext('2d');
     if (!ctx) return null;
 
-    const drawFrame = () => {
-      const srcW = recordPreviewVideo.videoWidth || 1;
-      const srcH = recordPreviewVideo.videoHeight || 1;
-      const targetRect = (page === 'mobile' ? document.getElementById('mobileCaptureRegion') : el.feed)?.getBoundingClientRect();
-      const viewportW = window.innerWidth || 1;
-      const viewportH = window.innerHeight || 1;
-      const sxScale = srcW / viewportW;
-      const syScale = srcH / viewportH;
+    const outputStream = recordCanvas.captureStream(0);
+    const outputTrack = outputStream.getVideoTracks()[0] || null;
+    const frameIntervalMs = 1000 / 60;
 
-      let sx = 0;
-      let sy = 0;
-      let sw = srcW;
-      let sh = srcH;
+    const drawFrame = (now) => {
+      if (!recordLastFrameAt || (now - recordLastFrameAt) >= frameIntervalMs) {
+        recordLastFrameAt = now;
+        const srcW = recordPreviewVideo.videoWidth || 1;
+        const srcH = recordPreviewVideo.videoHeight || 1;
+        const targetRect = (page === 'mobile' ? document.getElementById('mobileCaptureRegion') : el.feed)?.getBoundingClientRect();
+        const viewportW = window.innerWidth || 1;
+        const viewportH = window.innerHeight || 1;
+        const sxScale = srcW / viewportW;
+        const syScale = srcH / viewportH;
 
-      if (targetRect && targetRect.width > 1 && targetRect.height > 1) {
-        sx = Math.max(0, targetRect.left * sxScale);
-        sy = Math.max(0, targetRect.top * syScale);
-        sw = Math.min(srcW - sx, Math.max(1, targetRect.width * sxScale));
-        sh = Math.min(srcH - sy, Math.max(1, targetRect.height * syScale));
+        let sx = 0;
+        let sy = 0;
+        let sw = srcW;
+        let sh = srcH;
+
+        if (targetRect && targetRect.width > 1 && targetRect.height > 1) {
+          sx = Math.max(0, targetRect.left * sxScale);
+          sy = Math.max(0, targetRect.top * syScale);
+          sw = Math.min(srcW - sx, Math.max(1, targetRect.width * sxScale));
+          sh = Math.min(srcH - sy, Math.max(1, targetRect.height * syScale));
+        }
+
+        ctx.clearRect(0, 0, 2160, 3840);
+        ctx.drawImage(recordPreviewVideo, sx, sy, sw, sh, 0, 0, 2160, 3840);
+        if (outputTrack?.requestFrame) outputTrack.requestFrame();
       }
-
-      ctx.clearRect(0, 0, 2160, 3840);
-      ctx.drawImage(recordPreviewVideo, sx, sy, sw, sh, 0, 0, 2160, 3840);
       recordRaf = requestAnimationFrame(drawFrame);
     };
 
-    drawFrame();
-    return recordCanvas.captureStream(60);
+    drawFrame(performance.now());
+    return outputStream;
   }
 
   async function startRecording(silentFail = false) {
