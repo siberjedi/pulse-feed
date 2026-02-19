@@ -6,6 +6,7 @@
   const MUSIC_STORE = 'music';
   const MUSIC_KEY = 'tracks';
   const LEGACY_MUSIC_KEY = 'pulseMusicTracks.v1';
+  const RECORDING_SETTINGS_KEY = 'pulseRecordingSettings.v1';
   const page = document.body.dataset.page || 'admin';
   const isTimelinePage = page === 'feed' || page === 'mobile';
 
@@ -17,9 +18,11 @@
     timelineEvents: [], timelineIndex: 0, lastTrackTime: 0,
     visiblePostIds: [], visibleComments: {}, typingComments: {}, activeCommentFlows: {},
     nickPool: [],
+    recordingFps: 60,
+    recordingBitrateMbps: 24,
   };
 
-  const ids = ['composerForm','postText','postType','parentPostSelect','mediaFile','carouselFiles','carouselTimestamps','postTimestamp','mediaAspect','authorAvatarFile','authorHandle','authorRandom','isSponsored','isBoosted','feed','adminFeed','manageList','suggestionForm','suggestionHandle','suggestionBio','suggestionAvatarFile','suggestionManageList','suggestionsList','searchInput','autoScrollEnabled','scrollSpeed','pauseAtPosts','musicForm','musicTitle','musicArtist','musicFile','musicManageList','musicTrackSelect','musicToggleBtn','musicPrevBtn','musicNextBtn','musicTrackTitle','musicTrackSinger','musicProgress','musicCurrentTime','musicDuration','musicVisualizer','timelineOverlay','recordToggleBtn','editAvatarInput','editMediaInput'];
+  const ids = ['composerForm','postText','postType','parentPostSelect','mediaFile','carouselFiles','carouselTimestamps','postTimestamp','mediaAspect','authorAvatarFile','authorHandle','authorRandom','isSponsored','isBoosted','feed','adminFeed','manageList','suggestionForm','suggestionHandle','suggestionBio','suggestionAvatarFile','suggestionManageList','suggestionsList','searchInput','autoScrollEnabled','scrollSpeed','pauseAtPosts','musicForm','musicTitle','musicArtist','musicFile','musicManageList','musicTrackSelect','musicToggleBtn','musicPrevBtn','musicNextBtn','musicTrackTitle','musicTrackSinger','musicProgress','musicCurrentTime','musicDuration','musicVisualizer','timelineOverlay','recordToggleBtn','recordingSettingsForm','recordingFps','recordingBitrateMbps','editAvatarInput','editMediaInput'];
   const el = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
 
   const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -52,6 +55,25 @@
     localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
     localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
   }
+
+
+  const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
+  function persistRecordingSettings() {
+    const payload = {
+      fps: clamp(Number(state.recordingFps) || 60, 12, 120),
+      bitrateMbps: clamp(Number(state.recordingBitrateMbps) || 24, 4, 80),
+    };
+    state.recordingFps = payload.fps;
+    state.recordingBitrateMbps = payload.bitrateMbps;
+    localStorage.setItem(RECORDING_SETTINGS_KEY, JSON.stringify(payload));
+  }
+
+  function renderRecordingSettings() {
+    if (el.recordingFps) el.recordingFps.value = String(state.recordingFps);
+    if (el.recordingBitrateMbps) el.recordingBitrateMbps.value = String(state.recordingBitrateMbps);
+  }
+
 
   function openMusicDb() {
     if (!window.indexedDB) return Promise.resolve(null);
@@ -112,6 +134,14 @@
     state.tracks = await loadTracks();
     state.currentTrackId = state.tracks[0]?.id || '';
     state.nickPool = [...NICKNAMES];
+    try {
+      const cfg = JSON.parse(localStorage.getItem(RECORDING_SETTINGS_KEY) || '{}') || {};
+      state.recordingFps = clamp(Number(cfg.fps) || 60, 12, 120);
+      state.recordingBitrateMbps = clamp(Number(cfg.bitrateMbps) || 24, 4, 80);
+    } catch {
+      state.recordingFps = 60;
+      state.recordingBitrateMbps = 24;
+    }
   }
 
   function renderParentOptions() {
@@ -215,6 +245,7 @@
     renderSuggestionManager();
     renderTrackSelect();
     renderTrackManager();
+    renderRecordingSettings();
   }
 
   function pickRandomNick() {
@@ -625,7 +656,7 @@
 
     const outputStream = recordCanvas.captureStream(0);
     const outputTrack = outputStream.getVideoTracks()[0] || null;
-    const frameIntervalMs = 1000 / 60;
+    const frameIntervalMs = 1000 / clamp(Number(state.recordingFps) || 60, 12, 120);
 
     const drawFrame = (now) => {
       if (!recordLastFrameAt || (now - recordLastFrameAt) >= frameIntervalMs) {
@@ -667,7 +698,7 @@
     try {
       recordStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          frameRate: 60,
+          frameRate: clamp(Number(state.recordingFps) || 60, 12, 120),
           width: { ideal: 2160 },
           height: { ideal: 3840 },
           displaySurface: 'browser',
@@ -679,7 +710,12 @@
         monitorTypeSurfaces: 'exclude',
       });
       recordOutputStream = await buildCentered4kStream();
-      recorder = new MediaRecorder(recordOutputStream || recordStream, { mimeType: 'video/webm;codecs=vp9' });
+      const targetBps = Math.round(clamp(Number(state.recordingBitrateMbps) || 24, 4, 80) * 1000000);
+      const recOptions = { videoBitsPerSecond: targetBps };
+      if (window.MediaRecorder?.isTypeSupported?.('video/webm;codecs=vp9')) recOptions.mimeType = 'video/webm;codecs=vp9';
+      else if (window.MediaRecorder?.isTypeSupported?.('video/webm;codecs=vp8')) recOptions.mimeType = 'video/webm;codecs=vp8';
+      else recOptions.mimeType = 'video/webm';
+      recorder = new MediaRecorder(recordOutputStream || recordStream, recOptions);
       recordedChunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
       recorder.onstop = () => {
@@ -1022,6 +1058,17 @@
       state.popupPostId = null;
     });
 
+    if (el.recordingSettingsForm) {
+      const applyRecordingSettings = () => {
+        state.recordingFps = clamp(Number(el.recordingFps?.value) || 60, 12, 120);
+        state.recordingBitrateMbps = clamp(Number(el.recordingBitrateMbps?.value) || 24, 4, 80);
+        persistRecordingSettings();
+        renderRecordingSettings();
+      };
+      el.recordingSettingsForm.addEventListener('input', applyRecordingSettings);
+      el.recordingSettingsForm.addEventListener('change', applyRecordingSettings);
+    }
+
     if (el.searchInput) el.searchInput.addEventListener('input', renderSuggestions);
     if (el.autoScrollEnabled) el.autoScrollEnabled.addEventListener('change', () => { state.autoScroll = el.autoScrollEnabled.checked; });
     if (el.scrollSpeed) el.scrollSpeed.addEventListener('input', () => { state.speedPxPerSecond = Number(el.scrollSpeed.value); });
@@ -1132,6 +1179,7 @@
 
   async function init() {
     await loadData();
+    persistRecordingSettings();
     buildTimeline();
     refresh();
     bind();

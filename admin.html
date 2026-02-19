@@ -84,6 +84,22 @@
         <p><a href="mobile.html" class="tab-btn">Mobile 4K görünüm</a></p>
         <section id="adminFeed" class="feed"></section>
       </section>
+
+
+      <section class="panel" aria-label="Recording settings">
+        <h2>Recording settings</h2>
+        <form id="recordingSettingsForm" class="composer-form compact">
+          <div class="form-row">
+            <label>Recording FPS
+              <input id="recordingFps" type="number" min="12" max="120" step="1" value="60" />
+            </label>
+            <label>Video bitrate (Mbps)
+              <input id="recordingBitrateMbps" type="number" min="4" max="80" step="1" value="24" />
+            </label>
+          </div>
+          <p class="form-notice">Ayarlar tüm timeline ekranlarında (feed/mobile) kayıt kalitesini etkiler.</p>
+        </form>
+      </section>
     </main>
 
     <aside class="sidebar right-sidebar" aria-label="Discover and follow">
