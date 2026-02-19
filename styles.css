@@ -126,3 +126,6 @@ body[data-page="mobile"] .mobile-player{display:grid;gap:8px}
 body[data-page="mobile"] .mobile-feed{overflow:auto;align-content:start;padding-right:6px;scrollbar-width:none;-ms-overflow-style:none}
 body[data-page="mobile"] .mobile-feed::-webkit-scrollbar{width:0;height:0;display:none}
 body[data-page="mobile"] .post-card{max-width:100%}
+
+body[data-page="mobile"].mobile-playing .mobile-player{display:none}
+body[data-page="mobile"].mobile-playing .mobile-frame{grid-template-rows:1fr}

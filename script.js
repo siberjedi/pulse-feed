@@ -325,6 +325,13 @@
     visualizer.data = new Uint8Array(visualizer.analyser.frequencyBinCount);
   }
 
+
+  function syncMobilePlaybackLayout(isPlaying) {
+    if (page !== 'mobile') return;
+    document.body.classList.toggle('mobile-playing', Boolean(isPlaying));
+    if (isPlaying && el.feed) el.feed.scrollTop = 0;
+  }
+
   async function togglePlayback() {
     if (!audioPlayer.src) applyTrack(el.musicTrackSelect?.value || state.currentTrackId);
     if (!audioPlayer.src) return;
@@ -338,12 +345,14 @@
           if (!recordingReady) return;
         }
         await audioPlayer.play();
+        syncMobilePlaybackLayout(true);
       } catch {
         alert('Tarayıcı oynatmayı engelledi.');
       }
     } else {
       audioPlayer.pause();
       autoRecordStop();
+      syncMobilePlaybackLayout(false);
     }
 
     if (el.musicToggleBtn) el.musicToggleBtn.textContent = audioPlayer.paused ? '▶' : '❚❚';
@@ -548,6 +557,7 @@
   let recordPreviewVideo = null;
   let recordCanvas = null;
   let recordRaf = 0;
+  let recordClickStopArmed = false;
   let recordedChunks = [];
 
   function stopRecordPipeline() {
@@ -641,9 +651,12 @@
         recordStream?.getTracks().forEach((tr) => tr.stop());
         recordStream = null;
         recorder = null;
+        recordClickStopArmed = false;
         if (el.recordToggleBtn) el.recordToggleBtn.textContent = '● Record';
       };
       recorder.start(250);
+      recordClickStopArmed = false;
+      window.setTimeout(() => { recordClickStopArmed = true; }, 450);
       if (el.recordToggleBtn) el.recordToggleBtn.textContent = '■ Stop';
       return true;
     } catch {
@@ -656,6 +669,7 @@
   }
 
   function stopRecording() {
+    recordClickStopArmed = false;
     if (recorder && recorder.state !== 'inactive') recorder.stop();
   }
 
@@ -932,6 +946,20 @@
       });
     }
 
+    if (page === 'mobile') {
+      const stopOnTap = (e) => {
+        if (!recordClickStopArmed || !recorder) return;
+        const region = document.getElementById('mobileCaptureRegion');
+        if (!region || !region.contains(e.target)) return;
+        stopRecording();
+      };
+      document.addEventListener('click', stopOnTap);
+      document.addEventListener('keydown', (e) => {
+        if (!recorder || e.repeat) return;
+        if (e.code === 'KeyK' || e.code === 'Escape') stopRecording();
+      });
+    }
+
     document.addEventListener('click', (e) => {
       const closeBtn = e.target.closest('[data-close-overlay]');
       if (!closeBtn) return;
@@ -1038,10 +1066,14 @@
     audioPlayer.addEventListener('ended', () => {
       if (el.musicToggleBtn) el.musicToggleBtn.textContent = '▶';
       autoRecordStop();
+      syncMobilePlaybackLayout(false);
       hideOverlay();
     });
 
-    audioPlayer.addEventListener('pause', autoRecordStop);
+    audioPlayer.addEventListener('pause', () => {
+      autoRecordStop();
+      syncMobilePlaybackLayout(false);
+    });
   }
 
   async function init() {
@@ -1051,7 +1083,10 @@
     bind();
     initVisualizer();
     initAudio();
-    if (page === 'mobile') state.autoScroll = true;
+    if (page === 'mobile') {
+      state.autoScroll = true;
+      syncMobilePlaybackLayout(false);
+    }
     if (state.currentTrackId) applyTrack(state.currentTrackId);
     requestAnimationFrame(tick);
   }
