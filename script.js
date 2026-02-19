@@ -417,7 +417,23 @@
     if (!isTimelinePage || !el.feed || !commentId) return;
     const postNode = el.feed.querySelector(`[data-post-id="${postId}"]`);
     const commentNode = postNode?.querySelector(`[data-comment-id="${commentId}"]`);
-    centerNodeInFeed(commentNode || postNode);
+    if (!commentNode) {
+      centerNodeInFeed(postNode);
+      return;
+    }
+
+    if (page === 'mobile') {
+      const feedRect = el.feed.getBoundingClientRect();
+      const commentRect = commentNode.getBoundingClientRect();
+      const current = el.feed.scrollTop;
+      const reserveBelow = Math.max(commentRect.height * 2, 110);
+      const targetTop = feedRect.bottom - reserveBelow - commentRect.height;
+      const delta = commentRect.top - targetTop;
+      el.feed.scrollTo({ top: Math.max(0, current + delta), behavior: 'auto' });
+      return;
+    }
+
+    centerNodeInFeed(commentNode);
   }
 
   let overlayTimer = 0;
