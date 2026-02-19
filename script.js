@@ -424,16 +424,19 @@
 
     if (page === 'mobile') {
       const feedRect = el.feed.getBoundingClientRect();
-      const commentRect = commentNode.getBoundingClientRect();
       const current = el.feed.scrollTop;
       const commentNodes = Array.from(postNode?.querySelectorAll('.comment') || []);
       const sampleNodes = commentNodes.slice(-3);
       const sampleAvgHeight = sampleNodes.length
         ? (sampleNodes.reduce((sum, n) => sum + n.getBoundingClientRect().height, 0) / sampleNodes.length)
-        : commentRect.height;
+        : commentNode.getBoundingClientRect().height;
       const reserveBelow = Math.max(sampleAvgHeight * 2, 120);
       const safeBottom = feedRect.bottom - reserveBelow;
-      const delta = commentRect.bottom - safeBottom;
+
+      const commentsWrap = postNode?.querySelector('.comments');
+      const tailNode = commentsWrap?.lastElementChild || commentNode;
+      const tailRect = tailNode.getBoundingClientRect();
+      const delta = Math.max(0, tailRect.bottom - safeBottom);
       el.feed.scrollTo({ top: Math.max(0, current + delta), behavior: 'auto' });
       return;
     }
