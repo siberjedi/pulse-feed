@@ -3,133 +3,78 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Satranç Admin Paneli</title>
-  <script src="https://cdn.jsdelivr.net/npm/chess.js@1.4.0/dist/chess.min.js"></script>
+  <title>Satranç Admin</title>
   <style>
-    :root{--bg:#1f2025;--panel:#2b2d33;--panel2:#353841;--text:#e8ebf1;--muted:#aeb6c4;--accent:#5aa2ff;--danger:#ff5f6d;--ok:#44d17d;--w:#f0d9b5;--b:#b58863;--legal:rgba(78,165,255,.42);--atk:rgba(255,76,92,.28);--safe:rgba(74,156,255,.22)}
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif;padding:16px}
-    .app{max-width:1320px;margin:auto;display:grid;grid-template-columns:minmax(340px,650px) minmax(300px,1fr);gap:16px}
-    .panel{background:var(--panel);border:1px solid #43464f;border-radius:14px;padding:12px}
-    .board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1;border-radius:12px;overflow:hidden;border:1px solid #505564}
-    .sq{position:relative;display:flex;justify-content:center;align-items:center;font-size:40px;user-select:none}
-    .l{background:var(--w);color:#111}.d{background:var(--b);color:#111}.sq.legal::after{content:"";width:26%;aspect-ratio:1;border-radius:50%;background:var(--legal);position:absolute}
-    .sq.sel{outline:3px solid var(--accent);outline-offset:-3px}.sq.atk{box-shadow:0 0 0 999px var(--atk) inset}.sq.safe{box-shadow:0 0 0 999px var(--safe) inset}
-    .sq.threat{box-shadow:0 0 0 3px rgba(255,95,109,.7) inset}.coord{position:absolute;font-size:10px;opacity:.78;font-weight:600}.file{right:3px;bottom:2px}.rank{left:3px;top:2px}
-    .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.controls{display:grid;gap:10px}.label{font-size:13px;color:var(--muted)}
-    button,select,input{background:var(--panel2);color:var(--text);border:1px solid #575c68;border-radius:8px;padding:8px 10px}
-    button{cursor:pointer} .primary{background:var(--accent);color:#121723;font-weight:700;border-color:#7ab7ff}
-    .out,.warn{background:#23252c;border:1px solid #4b4f5b;border-radius:10px;padding:8px;font-family:ui-monospace,monospace;font-size:13px}
-    .warn{font-family:inherit;background:rgba(255,95,109,.14);color:#ffdbe0}
-    .tray{margin-top:10px;padding:10px;border:1px dashed #61697a;border-radius:10px;background:#252831;display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
-    .piece{height:54px;border:1px solid #596072;border-radius:8px;background:#3a3f4b;display:flex;align-items:center;justify-content:center;cursor:grab}
-    .piece img{max-width:42px;max-height:42px;pointer-events:none}.piece span{font-size:34px}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .status.ok{color:var(--ok)} .status.err{color:var(--danger)} .status{min-height:20px;color:var(--muted)}
-    .tex{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-    .tex label{font-size:12px;color:var(--muted);display:grid;gap:4px}
-    @media(max-width:980px){.app{grid-template-columns:1fr}}
+    body{margin:0;background:#1f2025;color:#e8ebf1;font-family:Inter,Arial,sans-serif;padding:20px}
+    .wrap{max-width:1000px;margin:auto;display:grid;gap:14px}.panel{background:#2b2d33;border:1px solid #43464f;border-radius:12px;padding:14px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}label{font-size:13px;color:#b9c0cf;display:grid;gap:6px}
+    input,button{background:#353841;color:#e8ebf1;border:1px solid #585c69;border-radius:8px;padding:8px 10px}button{cursor:pointer}
+    .row{display:flex;gap:8px;flex-wrap:wrap}.ok{color:#44d17d}.muted{color:#aeb6c4}
+    @media(max-width:760px){.grid{grid-template-columns:1fr 1fr}}
   </style>
 </head>
 <body>
-  <div class="app">
-    <section class="panel">
-      <div id="board" class="board"></div>
-      <div class="label" style="margin-top:8px">Editör Oyuncusu (alt tarafta bu oyuncunun taşları gösterilir)</div>
-      <div class="row">
-        <select id="editorSide"><option value="w">Beyaz</option><option value="b">Siyah</option></select>
-        <button id="flipBtn">Tahtayı Çevir</button>
-        <button id="clearBtn">Tahtayı Temizle</button>
-        <button id="startPosBtn">Başlangıç Dizilimi</button>
-      </div>
-      <div id="tray" class="tray"></div>
-    </section>
+  <div class="wrap">
+    <div class="panel">
+      <h2>Admin Paneli</h2>
+      <p class="muted">Bu sayfa yalnızca taş texture ve renk ayarlarını düzenler. Uygulamanın çalışan hali <b>index.html</b> üzerindedir.</p>
+      <div class="row"><a href="index.html" style="color:#9ec7ff">Index sayfasını aç</a></div>
+    </div>
 
-    <section class="panel controls">
-      <h2 style="margin:2px 0">Admin + Analiz</h2>
-      <div class="grid2">
-        <div><div class="label">Hamle Sırası</div><select id="sideToMove"><option value="w">Beyaz</option><option value="b">Siyah</option></select></div>
-        <div><div class="label">Rok Hakları</div><div class="row"><label><input id="K" type="checkbox" checked> K</label><label><input id="Q" type="checkbox" checked> Q</label><label><input id="k" type="checkbox" checked> k</label><label><input id="q" type="checkbox" checked> q</label></div></div>
+    <div class="panel">
+      <h3>Taş Texture (PNG) Yükleme</h3>
+      <div id="inputs" class="grid"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="saveBtn">Ayarları Kaydet</button>
+        <button id="clearBtn">Texture Sıfırla</button>
+        <span id="status" class="muted">Kaydedilmedi.</span>
       </div>
-      <div class="row">
-        <button id="startBtn" class="primary">Oyuna Başla (Analiz)</button>
-        <button id="undoBtn" disabled>Geri Al</button>
-        <button id="resetBtn" disabled>Editöre Dön</button>
-      </div>
-      <div class="label">FEN</div><div id="fen" class="out"></div>
-      <div id="status" class="status">Motor başlatılıyor...</div>
-      <div class="grid2">
-        <div class="out"><strong>Değerlendirme:</strong> <span id="eval">0.00</span></div>
-        <div class="out"><strong>En İyi Hamle:</strong> <span id="best">-</span></div>
-      </div>
-      <div class="out"><strong>Ana Varyant:</strong> <span id="pv">-</span></div>
-      <div class="warn" id="queenWarn">Vezir tehdidi yok.</div>
+    </div>
 
-      <h3 style="margin:4px 0">Taş Texture Yükleme (PNG)</h3>
-      <div class="tex" id="textureInputs"></div>
-    </section>
+    <div class="panel">
+      <h3>Tahta Renkleri</h3>
+      <div class="row">
+        <label>Açık Kare <input id="light" type="color" value="#f0d9b5" /></label>
+        <label>Koyu Kare <input id="dark" type="color" value="#b58863" /></label>
+      </div>
+    </div>
   </div>
 
   <script>
-    (() => {
-      const U={P:"♙",N:"♘",B:"♗",R:"♖",Q:"♕",K:"♔",p:"♟",n:"♞",b:"♝",r:"♜",q:"♛",k:"♚"},F=["a","b","c","d","e","f","g","h"],ALL=["K","Q","R","B","N","P","k","q","r","b","n","p"];
-      const S={mode:"editor",map:{},sideSel:"w",flip:false,sel:null,legal:[],ch:null,atk:new Set(),safe:new Set(),th:new Set(),qWarn:"",engine:null,eReady:false,eErr:"",deb:null,eval:{type:"cp",value:0,text:"0.00"},best:"-",pv:"-",textures:{}};
-      const D=id=>document.getElementById(id);
-      const dom={board:D("board"),tray:D("tray"),editorSide:D("editorSide"),flipBtn:D("flipBtn"),clearBtn:D("clearBtn"),startPosBtn:D("startPosBtn"),sideToMove:D("sideToMove"),K:D("K"),Q:D("Q"),k:D("k"),q:D("q"),startBtn:D("startBtn"),undoBtn:D("undoBtn"),resetBtn:D("resetBtn"),fen:D("fen"),status:D("status"),eval:D("eval"),best:D("best"),pv:D("pv"),queenWarn:D("queenWarn"),textureInputs:D("textureInputs")};
+    (()=>{
+      const pieces=["K","Q","R","B","N","P","k","q","r","b","n","p"];
+      const inputs=document.getElementById('inputs');
+      const status=document.getElementById('status');
+      const light=document.getElementById('light');
+      const dark=document.getElementById('dark');
+      const textures=JSON.parse(localStorage.getItem('chess_textures')||'{}');
+      const colors=JSON.parse(localStorage.getItem('chess_board_colors')||'{"light":"#f0d9b5","dark":"#b58863"}');
+      light.value=colors.light||'#f0d9b5'; dark.value=colors.dark||'#b58863';
 
-      function status(m,t=""){dom.status.textContent=m;dom.status.className=`status ${t}`;}
-      function sqColor(s){return((F.indexOf(s[0])+Number(s[1]))%2===1)?"l":"d"}
-      function turnFen(f,t){const p=f.split(/\s+/);p[1]=t;return p.join(" ")}
-      function getPiece(s){if(S.mode==="analysis"&&S.ch){const p=S.ch.get(s);return p?(p.color==="w"?p.type.toUpperCase():p.type):null;}return S.map[s]||null}
-      function setPiece(s,p){if(p)S.map[s]=p;else delete S.map[s]}
+      const files={};
+      pieces.forEach(p=>{
+        const label=document.createElement('label');
+        label.textContent=`${p} PNG`;
+        const input=document.createElement('input');
+        input.type='file'; input.accept='image/png';
+        input.onchange=()=>{files[p]=input.files?.[0]||null;};
+        label.appendChild(input);
+        inputs.appendChild(label);
+      });
 
-      function buildFEN(){const rows=[];for(let r=8;r>=1;r--){let row="",e=0;for(const f of F){const p=S.map[`${f}${r}`];if(!p)e++;else{if(e){row+=e;e=0}row+=p}}if(e)row+=e;rows.push(row)}const c=[dom.K.checked?"K":"",dom.Q.checked?"Q":"",dom.k.checked?"k":"",dom.q.checked?"q":""].join("")||"-";return `${rows.join("/")} ${dom.sideToMove.value} ${c} - 0 1`}
-      function updateFen(){dom.fen.textContent=S.mode==="analysis"&&S.ch?S.ch.fen():buildFEN()}
+      async function toDataURL(file){return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(file);});}
 
-      function parseFENtoEditor(fen){const p=fen.split(/\s+/);S.map={};p[0].split("/").forEach((row,ri)=>{let fi=0;for(const ch of row){if(/\d/.test(ch))fi+=Number(ch);else{S.map[`${F[fi]}${8-ri}`]=ch;fi++}}});dom.sideToMove.value=p[1]||"w";const c=p[2]||"-";dom.K.checked=c.includes("K");dom.Q.checked=c.includes("Q");dom.k.checked=c.includes("k");dom.q.checked=c.includes("q");updateFen();renderBoard();}
-
-      function drawPiece(holder,p){holder.innerHTML="";const t=S.textures[p];if(t){const i=document.createElement("img");i.src=t;i.alt=p;holder.appendChild(i);}else{const s=document.createElement("span");s.textContent=U[p];holder.appendChild(s);}}
-
-      function renderTray(){dom.tray.innerHTML="";const pieces=S.sideSel==="w"?["K","Q","R","B","N","P"]:["k","q","r","b","n","p"];pieces.forEach(p=>{const el=document.createElement("div");el.className="piece";el.draggable=true;el.dataset.piece=p;drawPiece(el,p);el.addEventListener("dragstart",e=>e.dataTransfer.setData("text/piece",p));dom.tray.appendChild(el)})}
-
-      function overlay(el,s){if(S.sel===s)el.classList.add("sel");if(S.legal.includes(s))el.classList.add("legal");if(S.atk.has(s))el.classList.add("atk");if(S.safe.has(s))el.classList.add("safe");if(S.th.has(s))el.classList.add("threat")}
-
-      function boardOrder(){return{files:S.flip?[...F].reverse():F,ranks:S.flip?[1,2,3,4,5,6,7,8]:[8,7,6,5,4,3,2,1]}}
-      function renderBoard(){dom.board.innerHTML="";const {files,ranks}=boardOrder();for(const r of ranks){for(const f of files){const s=`${f}${r}`;const el=document.createElement("div");el.className=`sq ${sqColor(s)}`;el.dataset.s=s;el.addEventListener("click",()=>onSquare(s));el.addEventListener("contextmenu",e=>{e.preventDefault();if(S.mode==="editor"){setPiece(s,null);updateFen();renderBoard()}});el.addEventListener("dragover",e=>{if(S.mode==="editor")e.preventDefault()});el.addEventListener("drop",e=>{if(S.mode!=="editor")return;e.preventDefault();const p=e.dataTransfer.getData("text/piece");if(p){setPiece(s,p);updateFen();renderBoard()}});
-        const piece=getPiece(s);if(piece)drawPiece(el,piece);
-        if(f===files[files.length-1]){const t=document.createElement("span");t.className="coord rank";t.textContent=r;el.appendChild(t)}
-        if(r===ranks[ranks.length-1]){const t=document.createElement("span");t.className="coord file";t.textContent=f;el.appendChild(t)}
-        overlay(el,s);dom.board.appendChild(el);
-      }}}
-
-      function validateKings(){let w=0,b=0;Object.values(S.map).forEach(p=>{if(p==="K")w++;if(p==="k")b++});if(w!==1)return{ok:false,m:w===0?"Analiz için beyaz şah gerekli.":"Analiz için yalnızca bir beyaz şah olmalı."};if(b!==1)return{ok:false,m:b===0?"Analiz için siyah şah gerekli.":"Analiz için yalnızca bir siyah şah olmalı."};return{ok:true}}
-
-      function legalAny(square){const p=S.ch.get(square);if(!p)return[];const t=new Chess(turnFen(S.ch.fen(),p.color));return t.moves({square,verbose:true})}
-      function moveAny(from,to){const p=S.ch.get(from);if(!p)return null;const bak=S.ch.fen();if(S.ch.turn()!==p.color)S.ch.load(turnFen(bak,p.color));const m=S.ch.move({from,to,promotion:"q"});if(!m)S.ch.load(bak);return m}
-
-      function onSquare(s){if(S.mode==="editor")return; if(!S.sel){if(!S.ch.get(s))return;S.sel=s;S.legal=legalAny(s).map(m=>m.to);return renderBoard()} if(s===S.sel){S.sel=null;S.legal=[];return renderBoard()} const m=moveAny(S.sel,s); if(!m){if(S.ch.get(s)){S.sel=s;S.legal=legalAny(s).map(x=>x.to)}else{S.sel=null;S.legal=[]}return renderBoard()} S.sel=null;S.legal=[];updateFen();computeOverlays();renderBoard();queueEngine()}
-
-      function attackedBy(square,color){const t=new Chess(turnFen(S.ch.fen(),color));return t.moves({verbose:true}).some(m=>m.to===square)}
-      function squaresBy(color){const a=[];for(let r=1;r<=8;r++)for(const f of F){const s=`${f}${r}`;const p=S.ch.get(s);if(p&&p.color===color)a.push(s)}return a}
-      function computeOverlays(){S.atk=new Set();S.safe=new Set();S.th=new Set();S.qWarn="";if(!S.ch)return;const c=S.ch.turn(),o=c==="w"?"b":"w";for(let r=1;r<=8;r++)for(const f of F){const s=`${f}${r}`;if(attackedBy(s,o))S.atk.add(s)} squaresBy(c).forEach(s=>{if(attackedBy(s,o))S.th.add(s)}); const ksq=squaresBy(c).find(s=>S.ch.get(s)?.type==="k"); if(ksq) legalAny(ksq).forEach(m=>{if(!attackedBy(m.to,o))S.safe.add(m.to)}); const qsq=squaresBy(c).find(s=>S.ch.get(s)?.type==="q"); if(qsq&&attackedBy(qsq,o))S.qWarn=`${c==="w"?"Beyaz":"Siyah"} vezir tehdit altında!`; dom.queenWarn.textContent=S.qWarn||"Vezir tehdidi yok."}
-
-      function engineUrls(){return[
-        "https://cdn.jsdelivr.net/npm/stockfish@17.1.0/src/stockfish.js",
-        "https://cdn.jsdelivr.net/npm/stockfish@16.0.0/src/stockfish.js"
-      ]}
-      function initEngine(){dom.startBtn.disabled=true;status("Motor başlatılıyor...");const tryUrl=(i)=>{if(i>=engineUrls().length){S.eErr="Motor yüklenemedi (CDN/bağlantı hatası).";status(S.eErr,"err");return;}let w;try{w=new Worker(engineUrls()[i]);}catch{tryUrl(i+1);return;}let ok=false;const timer=setTimeout(()=>{if(!ok){w.terminate();tryUrl(i+1)}},5000);w.onerror=()=>{clearTimeout(timer);w.terminate();tryUrl(i+1)};w.onmessage=(e)=>{String(e.data||"").split(/\r?\n/).forEach(l=>{if(!l)return;if(l==="readyok"){ok=true;clearTimeout(timer);S.engine=w;S.eReady=true;dom.startBtn.disabled=false;status("Motor hazır. Oyuna başlayabilirsiniz.","ok");return;}if(l.startsWith("info "))parseInfo(l);if(l.startsWith("bestmove")){S.best=l.split(/\s+/)[1]||"-";dom.best.textContent=S.best;}})};w.postMessage("uci");w.postMessage("isready")};tryUrl(0)}
-      function parseInfo(l){const cp=l.match(/\bscore\s+cp\s+(-?\d+)/),mate=l.match(/\bscore\s+mate\s+(-?\d+)/),pv=l.match(/\bpv\s+(.+)$/);if(mate)S.eval={type:"mate",value:Number(mate[1]),text:`#${mate[1]}`};else if(cp)S.eval={type:"cp",value:Number(cp[1]),text:(Number(cp[1])/100).toFixed(2)};if(pv)S.pv=pv[1].trim();dom.eval.textContent=S.eval.text;dom.pv.textContent=S.pv}
-      function queueEngine(){if(!S.engine||!S.eReady||!S.ch)return;clearTimeout(S.deb);S.deb=setTimeout(()=>{S.engine.postMessage("stop");S.engine.postMessage(`position fen ${S.ch.fen()}`);S.engine.postMessage("go depth 18")},500)}
-
-      function startAnalysis(){if(!S.eReady)return status(S.eErr||"Motor hazır değil.","err");const v=validateKings();if(!v.ok)return status(v.m,"err");const c=new Chess();if(!c.load(buildFEN()))return status("Geçersiz FEN.","err");S.mode="analysis";S.ch=c;S.sel=null;S.legal=[];dom.undoBtn.disabled=false;dom.resetBtn.disabled=false;status("Analiz modu aktif.","ok");updateFen();computeOverlays();renderBoard();queueEngine()}
-      function undo(){if(!S.ch||!S.ch.undo())return status("Geri alınacak hamle yok.","err");S.sel=null;S.legal=[];updateFen();computeOverlays();renderBoard();queueEngine()}
-      function resetEditor(){if(!S.ch)return;const f=S.ch.fen();S.mode="editor";S.ch=null;S.sel=null;S.legal=[];S.atk=new Set();S.safe=new Set();S.th=new Set();dom.undoBtn.disabled=true;dom.resetBtn.disabled=true;parseFENtoEditor(f);status("Editör moduna dönüldü.","ok")}
-
-      function initTexturePanel(){ALL.forEach(p=>{const lab=document.createElement("label");lab.textContent=`${p} PNG`;const inp=document.createElement("input");inp.type="file";inp.accept="image/png";inp.addEventListener("change",()=>{const f=inp.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{S.textures[p]=String(r.result);renderTray();renderBoard()};r.readAsDataURL(f)});lab.appendChild(inp);dom.textureInputs.appendChild(lab)})}
-
-      function bind(){dom.editorSide.addEventListener("change",()=>{S.sideSel=dom.editorSide.value;S.flip=S.sideSel==="b";renderTray();renderBoard()});dom.flipBtn.onclick=()=>{S.flip=!S.flip;renderBoard()};dom.clearBtn.onclick=()=>{if(S.mode!=="editor")return;S.map={};updateFen();renderBoard()};dom.startPosBtn.onclick=()=>{if(S.mode!=="editor")return;parseFENtoEditor("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");S.flip=(S.sideSel==="b");renderBoard()};dom.sideToMove.onchange=updateFen;[dom.K,dom.Q,dom.k,dom.q].forEach(x=>x.onchange=updateFen);dom.startBtn.onclick=startAnalysis;dom.undoBtn.onclick=undo;dom.resetBtn.onclick=resetEditor}
-
-      function init(){initTexturePanel();bind();renderTray();parseFENtoEditor("8/8/8/8/8/8/8/8 w - - 0 1");initEngine()}
-      init();
+      document.getElementById('saveBtn').onclick=async()=>{
+        for(const p of pieces){if(files[p]) textures[p]=await toDataURL(files[p]);}
+        localStorage.setItem('chess_textures',JSON.stringify(textures));
+        localStorage.setItem('chess_board_colors',JSON.stringify({light:light.value,dark:dark.value}));
+        status.textContent='Kaydedildi. Index sayfasını yenileyin.'; status.className='ok';
+      };
+      document.getElementById('clearBtn').onclick=()=>{
+        localStorage.removeItem('chess_textures');
+        localStorage.setItem('chess_board_colors',JSON.stringify({light:'#f0d9b5',dark:'#b58863'}));
+        status.textContent='Texture sıfırlandı.'; status.className='ok';
+      };
     })();
   </script>
 </body>
