@@ -353,6 +353,7 @@
       audioPlayer.pause();
       autoRecordStop();
       syncMobilePlaybackLayout(false);
+      el.feed?.style.setProperty('--mobile-comment-reserve', '140px');
     }
 
     if (el.musicToggleBtn) el.musicToggleBtn.textContent = audioPlayer.paused ? '▶' : '❚❚';
@@ -431,13 +432,15 @@
         ? (sampleNodes.reduce((sum, n) => sum + n.getBoundingClientRect().height, 0) / sampleNodes.length)
         : commentNode.getBoundingClientRect().height;
       const reserveBelow = Math.max(sampleAvgHeight * 2, 120);
+      el.feed.style.setProperty('--mobile-comment-reserve', `${Math.round(reserveBelow)}px`);
       const safeBottom = feedRect.bottom - reserveBelow;
 
       const commentsWrap = postNode?.querySelector('.comments');
       const tailNode = commentsWrap?.lastElementChild || commentNode;
       const tailRect = tailNode.getBoundingClientRect();
-      const delta = Math.max(0, tailRect.bottom - safeBottom);
-      el.feed.scrollTo({ top: Math.max(0, current + delta), behavior: 'auto' });
+      const targetScroll = current + (tailRect.bottom - safeBottom);
+      const maxScroll = Math.max(0, el.feed.scrollHeight - el.feed.clientHeight);
+      el.feed.scrollTo({ top: Math.max(0, Math.min(maxScroll, targetScroll)), behavior: 'auto' });
       return;
     }
 

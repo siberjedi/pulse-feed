@@ -123,7 +123,7 @@ body[data-page="mobile"]{padding:0;overflow:hidden;background:#000}
 body[data-page="mobile"] .mobile-stage{width:100vw;height:100vh;display:grid;place-items:center}
 body[data-page="mobile"] .mobile-frame{width:min(100vw,56.25vh);height:min(100vh,177.78vw);max-width:2160px;max-height:3840px;aspect-ratio:9/16;border:1px solid #222;border-radius:28px;padding:20px 16px;display:grid;grid-template-rows:auto 1fr;gap:16px;overflow:hidden;background:#030303}
 body[data-page="mobile"] .mobile-player{display:grid;gap:8px}
-body[data-page="mobile"] .mobile-feed{overflow:auto;align-content:start;padding-right:6px;scrollbar-width:none;-ms-overflow-style:none}
+body[data-page="mobile"] .mobile-feed{overflow:auto;align-content:start;padding-right:6px;padding-bottom:calc(var(--mobile-comment-reserve, 140px) + 24px);scrollbar-width:none;-ms-overflow-style:none}
 body[data-page="mobile"] .mobile-feed::-webkit-scrollbar{width:0;height:0;display:none}
 body[data-page="mobile"] .post-card{max-width:100%}
 
