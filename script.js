@@ -1071,7 +1071,6 @@
     });
 
     audioPlayer.addEventListener('pause', () => {
-      autoRecordStop();
       syncMobilePlaybackLayout(false);
     });
   }
