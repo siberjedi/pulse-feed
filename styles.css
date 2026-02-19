@@ -117,3 +117,11 @@ body[data-page="feed"] .feed-controls{position:sticky;top:0;background:#000;z-in
 .admin-ts-row{display:flex;align-items:center;gap:8px;margin-top:8px}.admin-ts-row input{max-width:120px}
 .comment-edit{align-items:flex-start}.comment-edit-fields{display:grid;gap:6px;width:100%}.comment-edit-fields input,.comment-edit-fields textarea{width:100%}
 .popup-comments{overscroll-behavior:contain}
+
+
+body[data-page="mobile"]{padding:0;overflow:hidden;background:#000}
+body[data-page="mobile"] .mobile-stage{width:100vw;height:100vh;display:grid;place-items:center}
+body[data-page="mobile"] .mobile-frame{width:min(100vw,56.25vh);height:min(100vh,177.78vw);max-width:2160px;max-height:3840px;aspect-ratio:9/16;border:1px solid #222;border-radius:28px;padding:20px 16px;display:grid;grid-template-rows:auto 1fr;gap:16px;overflow:hidden;background:#030303}
+body[data-page="mobile"] .mobile-player{display:grid;gap:8px}
+body[data-page="mobile"] .mobile-feed{overflow:auto;align-content:start;padding-right:6px}
+body[data-page="mobile"] .post-card{max-width:100%}

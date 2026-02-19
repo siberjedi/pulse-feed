@@ -7,6 +7,7 @@
   const MUSIC_KEY = 'tracks';
   const LEGACY_MUSIC_KEY = 'pulseMusicTracks.v1';
   const page = document.body.dataset.page || 'admin';
+  const isTimelinePage = page === 'feed' || page === 'mobile';
 
   const NICKNAMES = ['DerinAkis','BetonZihin','MaskesizGercek','GriDuvar','AltKatSakin','SogukGercek','DipDalga','KaranlikYorum','Gozlemci34','NabizTutan','IsimsizKayit','SistemArizasi','ArkaSokakVeri','KuleAltindan','YedinciKat','UyariSeviyesi','BuzGibiHakikat','SesKaydi01','CatiKatisi','DuvarArasi','user384920','yorumcu_xx','gercekler123','vatandas_01','milliSes78','haberTakipcisi','objektif_bakis','dogruYorumcu','netKonusan','turkEvladidir','sistemSavunucusu','rastgele_987','anon_kayit','yorumMakinesi','feedKontrol','veri_akisi','trendAvcisi','feedTetik','BodrumdanSes','TesisatciDegil','CatiUstunde','DelikIcinden','BetonAltindan','KilerSakin','DuvarKemirgen','SogukZemin','KatMaliki','KiraciDegil','TapuBizde','IslakDuvar','RutubetliGercek','SarsintiOncesi','ArizaKaydi','EnkazAltindan','PasaSakini','YonetimKatinda','MarkaOrtak','GuvenliYarin','BuyumeUzmani','EkonomiTakip','ResmiAciklama','PRMasasi','KrizYonetimi','KamuBilgi','IletisimOfisi','GuvenilirKaynak','KurumsalSes','DestekHatti','StratejiMasasi','DegerYaratir','IleriVizyon','YerAltiKaydi','SertAkis','DissArsivi','MaskeyiDusur','CizgiDisi','SakinOlmam','HukumGeldi','DefterAcik','KayitDisi','GozDiken','NabizYuksek','TansiyonArtis','DuzenCoktu','SinyalYok','VeriPatladi'];
 
@@ -125,7 +126,7 @@
   }
 
   function getFeedPosts() {
-    if (page !== 'feed') return allPosts();
+    if (!isTimelinePage) return allPosts();
     return state.visiblePostIds
       .map((id) => state.posts.find((x) => x.id === id && x.type === 'post'))
       .filter(Boolean);
@@ -135,7 +136,7 @@
     if (!target) return;
     const postList = getFeedPosts();
     if (!postList.length) {
-      target.innerHTML = page === 'feed'
+      target.innerHTML = isTimelinePage
         ? '<div class="empty-feed">Akış müzik zaman damgalarını bekliyor...</div>'
         : '<div class="empty-feed">No posts yet.</div>';
       return;
@@ -147,8 +148,8 @@
       const avatar = p.authorAvatar || avatarFor(p.author);
       const allComments = commentsFor(p.id);
       const revealedIds = state.visibleComments[p.id] || [];
-      const shownComments = page === 'feed' ? allComments.filter((c) => revealedIds.includes(c.id)) : allComments;
-      const typing = page === 'feed' ? state.typingComments[p.id] : null;
+      const shownComments = isTimelinePage ? allComments.filter((c) => revealedIds.includes(c.id)) : allComments;
+      const typing = isTimelinePage ? state.typingComments[p.id] : null;
 
       return `<article class="post-card" data-post-id="${p.id}">
         <header class="post-head">
@@ -332,7 +333,7 @@
       try {
         await ensureVisualizerNodes();
         if (visualizer.ctx?.state === 'suspended') await visualizer.ctx.resume();
-        if (page === 'feed') {
+        if (isTimelinePage) {
           const recordingReady = await startRecording(true);
           if (!recordingReady) return;
         }
@@ -384,7 +385,7 @@
   }
 
   function centerPost(postId) {
-    if (page !== 'feed' || !el.feed) return;
+    if (!isTimelinePage || !el.feed) return;
     const node = el.feed.querySelector(`[data-post-id="${postId}"]`);
     if (!node) return;
     const rect = node.getBoundingClientRect();
@@ -393,7 +394,7 @@
   }
 
   function alignPostTop(postId) {
-    if (page !== 'feed' || !el.feed) return;
+    if (!isTimelinePage || !el.feed) return;
     const node = el.feed.querySelector(`[data-post-id="${postId}"]`);
     if (!node) return;
     const rect = node.getBoundingClientRect();
@@ -401,7 +402,7 @@
   }
 
   function alignCommentWithBottomBuffer(postId, commentId) {
-    if (page !== 'feed' || !el.feed || !commentId) return;
+    if (!isTimelinePage || !el.feed || !commentId) return;
     const postNode = el.feed.querySelector(`[data-post-id="${postId}"]`);
     if (!postNode) return;
     const commentNode = postNode.querySelector(`[data-comment-id="${commentId}"]`);
@@ -429,7 +430,7 @@
   }
 
   function showOverlay(html, { sticky = false, duration = 1300 } = {}) {
-    if (page !== 'feed' || !el.timelineOverlay) return;
+    if (!isTimelinePage || !el.timelineOverlay) return;
     clearTimeout(overlayTimer);
     clearInterval(boostTimer);
     el.timelineOverlay.classList.add('active');
@@ -525,7 +526,7 @@
   }
 
   function processTimeline() {
-    if (page !== 'feed' || audioPlayer.paused) return;
+    if (!isTimelinePage || audioPlayer.paused) return;
     const t = audioPlayer.currentTime;
 
     if (t + 0.3 < state.lastTrackTime) {
@@ -549,14 +550,14 @@
   let recordedChunks = [];
 
   async function startRecording(silentFail = false) {
-    if (page !== 'feed') return false;
+    if (!isTimelinePage) return false;
     if (recorder) return true;
     try {
       recordStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           frameRate: 60,
-          width: { ideal: 3840 },
-          height: { ideal: 2160 },
+          width: { ideal: 2160 },
+          height: { ideal: 3840 },
           displaySurface: 'browser',
         },
         audio: false,
@@ -878,7 +879,7 @@
   }
 
   function tick(now) {
-    if (page === 'feed') {
+    if (isTimelinePage) {
       if (state.autoScroll) {
         const delta = (now - state.lastTime) / 1000;
         window.scrollBy(0, state.speedPxPerSecond * delta);
