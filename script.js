@@ -391,7 +391,7 @@
       const nodeRect = node.getBoundingClientRect();
       const current = el.feed.scrollTop;
       const delta = (nodeRect.top - feedRect.top) - ((feedRect.height / 2) - (nodeRect.height / 2));
-      el.feed.scrollTo({ top: Math.max(0, current + delta), behavior: 'smooth' });
+      el.feed.scrollTo({ top: Math.max(0, current + delta), behavior: 'auto' });
       return;
     }
     const rect = node.getBoundingClientRect();
@@ -946,10 +946,9 @@
 
   function tick(now) {
     if (isTimelinePage) {
-      if (state.autoScroll) {
+      if (state.autoScroll && page !== 'mobile') {
         const delta = (now - state.lastTime) / 1000;
-        if (page === 'mobile' && el.feed) el.feed.scrollBy(0, state.speedPxPerSecond * delta);
-        else window.scrollBy(0, state.speedPxPerSecond * delta);
+        window.scrollBy(0, state.speedPxPerSecond * delta);
       }
       if (!state.lastBoostAt) state.lastBoostAt = now;
       if (now - state.lastBoostAt > 650) {
