@@ -426,9 +426,14 @@
       const feedRect = el.feed.getBoundingClientRect();
       const commentRect = commentNode.getBoundingClientRect();
       const current = el.feed.scrollTop;
-      const reserveBelow = Math.max(commentRect.height * 2, 110);
-      const targetTop = feedRect.bottom - reserveBelow - commentRect.height;
-      const delta = commentRect.top - targetTop;
+      const commentNodes = Array.from(postNode?.querySelectorAll('.comment') || []);
+      const sampleNodes = commentNodes.slice(-3);
+      const sampleAvgHeight = sampleNodes.length
+        ? (sampleNodes.reduce((sum, n) => sum + n.getBoundingClientRect().height, 0) / sampleNodes.length)
+        : commentRect.height;
+      const reserveBelow = Math.max(sampleAvgHeight * 2, 120);
+      const safeBottom = feedRect.bottom - reserveBelow;
+      const delta = commentRect.bottom - safeBottom;
       el.feed.scrollTo({ top: Math.max(0, current + delta), behavior: 'auto' });
       return;
     }
