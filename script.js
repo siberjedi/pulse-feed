@@ -587,9 +587,12 @@
   let recordLastFrameAt = 0;
   let recordClickStopArmed = false;
   let recordStopTapAllowedAt = 0;
+  let recordStopTimer = 0;
   let recordedChunks = [];
 
   function stopRecordPipeline() {
+    if (recordStopTimer) clearTimeout(recordStopTimer);
+    recordStopTimer = 0;
     if (recordRaf) cancelAnimationFrame(recordRaf);
     recordRaf = 0;
     recordLastFrameAt = 0;
@@ -707,9 +710,21 @@
     }
   }
 
-  function stopRecording() {
+  function stopRecording({ flushDelayMs = 0 } = {}) {
     recordClickStopArmed = false;
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    if (!recorder || recorder.state === 'inactive') return;
+    if (recordStopTimer) clearTimeout(recordStopTimer);
+
+    const finalize = () => {
+      if (!recorder || recorder.state === 'inactive') return;
+      try { recorder.requestData(); } catch {}
+      window.setTimeout(() => {
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+      }, 120);
+    };
+
+    if (flushDelayMs > 0) recordStopTimer = window.setTimeout(finalize, flushDelayMs);
+    else finalize();
   }
 
   const autoRecordStart = async () => { await startRecording(true); };
@@ -1105,7 +1120,7 @@
 
     audioPlayer.addEventListener('ended', () => {
       if (el.musicToggleBtn) el.musicToggleBtn.textContent = '▶';
-      autoRecordStop();
+      stopRecording({ flushDelayMs: 1200 });
       syncMobilePlaybackLayout(false);
       hideOverlay();
     });
