@@ -405,72 +405,107 @@
         dom.pv.textContent = state.pv;
       }
 
+      function wireEngineOutput(engine) {
+        engine.onmessage = (eventOrLine) => {
+          const raw = typeof eventOrLine === "string" ? eventOrLine : String(eventOrLine?.data || "");
+          for (const line of raw.split(/\r?\n/)) {
+            if (!line) continue;
+            if (line.startsWith("info ")) parseInfo(line);
+            if (line.startsWith("bestmove")) {
+              state.bestMove = line.split(/\s+/)[1] || "-";
+              dom.best.textContent = state.bestMove;
+            }
+          }
+        };
+      }
+
+      async function waitEngineReady(engine, timeoutMs = 7000) {
+        return await new Promise(resolve => {
+          let done = false;
+          const timeout = setTimeout(() => {
+            if (done) return;
+            done = true;
+            resolve(false);
+          }, timeoutMs);
+
+          engine.onmessage = (eventOrLine) => {
+            const raw = typeof eventOrLine === "string" ? eventOrLine : String(eventOrLine?.data || "");
+            for (const line of raw.split(/\r?\n/)) {
+              if (!line) continue;
+              if (line === "readyok" && !done) {
+                done = true;
+                clearTimeout(timeout);
+                resolve(true);
+              }
+              if (line.startsWith("info ")) parseInfo(line);
+              if (line.startsWith("bestmove")) {
+                state.bestMove = line.split(/\s+/)[1] || "-";
+                dom.best.textContent = state.bestMove;
+              }
+            }
+          };
+
+          if (typeof engine.onerror !== "undefined") {
+            engine.onerror = () => {
+              if (done) return;
+              done = true;
+              clearTimeout(timeout);
+              resolve(false);
+            };
+          }
+
+          engine.postMessage("uci");
+          engine.postMessage("isready");
+        });
+      }
+
+      async function tryWorkerFactory(createWorker) {
+        try {
+          const worker = createWorker();
+          const ok = await waitEngineReady(worker);
+          if (!ok) {
+            if (typeof worker.terminate === "function") worker.terminate();
+            return null;
+          }
+          wireEngineOutput(worker);
+          return worker;
+        } catch (_) {
+          return null;
+        }
+      }
+
       async function initEngine() {
         dom.startBtn.disabled = true;
         setStatus("Motor başlatılıyor...");
 
-        const urls = [
-          "https://cdn.jsdelivr.net/npm/stockfish@17.1.0/src/stockfish.js",
-          "https://unpkg.com/stockfish@17.1.0/src/stockfish.js",
-          "https://cdn.jsdelivr.net/npm/stockfish@16.0.0/src/stockfish.js"
+        const sources = [
+          { type: "local-worker", label: "Yerel stockfish.js", factory: () => new Worker("./stockfish.js") },
+          { type: "local-worker", label: "Yerel /stockfish.js", factory: () => new Worker("/stockfish.js") },
+          { type: "cdn-worker", label: "CDN jsdelivr 17.1.0", factory: () => new Worker(URL.createObjectURL(new Blob(["importScripts('https://cdn.jsdelivr.net/npm/stockfish@17.1.0/src/stockfish.js')"], { type: "application/javascript" }))) },
+          { type: "cdn-worker", label: "CDN unpkg 17.1.0", factory: () => new Worker(URL.createObjectURL(new Blob(["importScripts('https://unpkg.com/stockfish@17.1.0/src/stockfish.js')"], { type: "application/javascript" }))) },
+          { type: "cdn-worker", label: "CDN jsdelivr 16.0.0", factory: () => new Worker(URL.createObjectURL(new Blob(["importScripts('https://cdn.jsdelivr.net/npm/stockfish@16.0.0/src/stockfish.js')"], { type: "application/javascript" }))) }
         ];
 
-        // 1) Worker (CDN) dene
-        for (const url of urls) {
-          try {
-            const blob = new Blob([`importScripts('${url}')`], { type: "application/javascript" });
-            const worker = new Worker(URL.createObjectURL(blob));
-
-            const ok = await new Promise(resolve => {
-              let done = false;
-              const timeout = setTimeout(() => {
-                if (done) return;
-                done = true;
-                worker.terminate();
-                resolve(false);
-              }, 7000);
-
-              worker.onerror = () => {
-                if (done) return;
-                done = true;
-                clearTimeout(timeout);
-                worker.terminate();
-                resolve(false);
-              };
-
-              worker.onmessage = (event) => {
-                const lines = String(event.data || "").split(/\r?\n/);
-                for (const line of lines) {
-                  if (!line) continue;
-                  if (line === "readyok" && !done) {
-                    done = true;
-                    clearTimeout(timeout);
-                    resolve(true);
-                  }
-                  if (line.startsWith("info ")) parseInfo(line);
-                  if (line.startsWith("bestmove")) {
-                    state.bestMove = line.split(/\s+/)[1] || "-";
-                    dom.best.textContent = state.bestMove;
-                  }
-                }
-              };
-
-              worker.postMessage("uci");
-              worker.postMessage("isready");
-            });
-
-            if (ok) {
-              state.engine = worker;
-              state.engineReady = true;
-              setStatus("Motor hazır. Oyuna başlayabilirsiniz.", "ok");
-              dom.startBtn.disabled = false;
-              return;
-            }
-          } catch (_) {}
+        for (const source of sources) {
+          const engine = await tryWorkerFactory(source.factory);
+          if (engine) {
+            state.engine = engine;
+            state.engineReady = true;
+            setStatus(`Motor hazır (${source.label}). Oyuna başlayabilirsiniz.`, "ok");
+            dom.startBtn.disabled = false;
+            return;
+          }
         }
 
-        // 2) Worker başarısızsa main-thread STOCKFISH() fallback
-        for (const url of urls) {
+        // Son fallback: script olarak yükleyip STOCKFISH() fonksiyonu varsa kullan.
+        const scriptUrls = [
+          "./stockfish.js",
+          "/stockfish.js",
+          "https://cdn.jsdelivr.net/npm/stockfish@17.1.0/src/stockfish.js",
+          "https://unpkg.com/stockfish@17.1.0/src/stockfish.js"
+        ];
+
+        for (const url of scriptUrls) {
           try {
             await new Promise((resolve, reject) => {
               const s = document.createElement("script");
@@ -483,44 +518,19 @@
             if (typeof window.STOCKFISH !== "function") continue;
 
             const engine = window.STOCKFISH();
-            const ok = await new Promise(resolve => {
-              let done = false;
-              const timeout = setTimeout(() => {
-                if (done) return;
-                done = true;
-                resolve(false);
-              }, 7000);
+            const ok = await waitEngineReady(engine);
+            if (!ok) continue;
+            wireEngineOutput(engine);
 
-              engine.onmessage = (line) => {
-                const msg = String(line || "");
-                if (!msg) return;
-                if (msg === "readyok" && !done) {
-                  done = true;
-                  clearTimeout(timeout);
-                  resolve(true);
-                }
-                if (msg.startsWith("info ")) parseInfo(msg);
-                if (msg.startsWith("bestmove")) {
-                  state.bestMove = msg.split(/\s+/)[1] || "-";
-                  dom.best.textContent = state.bestMove;
-                }
-              };
-
-              engine.postMessage("uci");
-              engine.postMessage("isready");
-            });
-
-            if (ok) {
-              state.engine = engine;
-              state.engineReady = true;
-              setStatus("Motor hazır. Oyuna başlayabilirsiniz.", "ok");
-              dom.startBtn.disabled = false;
-              return;
-            }
+            state.engine = engine;
+            state.engineReady = true;
+            setStatus(`Motor hazır (${url}). Oyuna başlayabilirsiniz.`, "ok");
+            dom.startBtn.disabled = false;
+            return;
           } catch (_) {}
         }
 
-        state.engineError = "Motor yüklenemedi (CDN/bağlantı hatası).";
+        state.engineError = "Motor yüklenemedi. İnternet erişimi yoksa proje köküne stockfish.js koyun.";
         setStatus(state.engineError, "err");
       }
 
