@@ -2,11 +2,405 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0; url=admin.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse</title>
+  <title>Lyric Timing Editor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101216;
+      --panel: #1a1f27;
+      --panel-soft: #202734;
+      --text: #e8ecf2;
+      --muted: #9aa6b8;
+      --accent: #4ea1ff;
+      --accent-soft: #2a6ab3;
+      --danger: #ff5f6d;
+      --line: #2f3949;
+      --active: #243043;
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1rem;
+    }
+
+    .app {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+
+    h1, h2 {
+      margin: 0 0 0.75rem 0;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    h1 { font-size: 1.4rem; }
+    h2 { font-size: 1.05rem; }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    textarea,
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      color: var(--text);
+      background: var(--panel-soft);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.55rem 0.65rem;
+    }
+
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+    }
+
+    button,
+    .button-like {
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      color: var(--text);
+      padding: 0.45rem 0.7rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-size: 0.9rem;
+    }
+
+    button:hover,
+    .button-like:hover {
+      border-color: var(--accent);
+      background: #273246;
+    }
+
+    button.primary {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .time-display {
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      min-width: 130px;
+    }
+
+    #seekBar {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .lyrics-list {
+      display: grid;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+
+    .lyric-row {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.6rem;
+      background: #161b23;
+      display: grid;
+      gap: 0.45rem;
+      grid-template-columns: 1fr;
+    }
+
+    .lyric-row.active {
+      border-color: var(--accent);
+      background: var(--active);
+    }
+
+    .lyric-controls {
+      display: grid;
+      grid-template-columns: 1fr repeat(2, minmax(90px, 110px)) repeat(2, auto);
+      gap: 0.4rem;
+      align-items: center;
+    }
+
+    .small {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    #exportOutput {
+      min-height: 180px;
+      white-space: pre;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    @media (max-width: 840px) {
+      .lyric-controls {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
-  <p>Go to <a href="admin.html">admin.html</a>.</p>
+  <main class="app">
+    <section class="card">
+      <h1>Manual Lyric Timing Editor</h1>
+      <div class="row" style="margin-bottom: 0.65rem;">
+        <label class="button-like" for="audioInput">Upload Audio (mp3/wav)</label>
+        <input id="audioInput" type="file" accept="audio/mpeg,audio/wav,audio/mp3,.mp3,.wav" />
+        <span id="audioName" class="small">No file selected</span>
+      </div>
+
+      <div class="row" style="gap: 0.4rem; margin-bottom: 0.5rem;">
+        <button id="playPauseBtn" class="primary">Play</button>
+        <button data-jump="-0.5">-0.5s</button>
+        <button data-jump="-0.1">-0.1s</button>
+        <button data-jump="0.1">+0.1s</button>
+        <button data-jump="0.5">+0.5s</button>
+        <span id="timeDisplay" class="time-display">0.000 / 0.000</span>
+      </div>
+
+      <input id="seekBar" type="range" min="0" max="0" step="0.001" value="0" />
+      <audio id="audio" preload="metadata"></audio>
+    </section>
+
+    <section class="card">
+      <h2>Lyrics Input</h2>
+      <textarea id="lyricsInput" placeholder="Paste lyrics here, one line per lyric..."></textarea>
+      <div class="row" style="margin-top: 0.6rem;">
+        <button id="loadLyricsBtn" class="primary">Load Lyrics</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Editable Lyric Lines</h2>
+      <div id="lyricsList" class="lyrics-list"></div>
+    </section>
+
+    <section class="card">
+      <h2>Export</h2>
+      <div class="row" style="margin-bottom: 0.5rem;">
+        <button id="exportBtn" class="primary">Export Timing</button>
+      </div>
+      <textarea id="exportOutput" readonly placeholder="start|end|lyric"></textarea>
+    </section>
+  </main>
+
+  <script>
+    const audio = document.getElementById('audio');
+    const audioInput = document.getElementById('audioInput');
+    const audioName = document.getElementById('audioName');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const seekBar = document.getElementById('seekBar');
+
+    const lyricsInput = document.getElementById('lyricsInput');
+    const loadLyricsBtn = document.getElementById('loadLyricsBtn');
+    const lyricsList = document.getElementById('lyricsList');
+
+    const exportBtn = document.getElementById('exportBtn');
+    const exportOutput = document.getElementById('exportOutput');
+
+    const jumpButtons = Array.from(document.querySelectorAll('[data-jump]'));
+
+    const lyrics = [];
+
+    const toFixed3 = (value) => Number(value).toFixed(3);
+    const parseTimeValue = (value) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : null;
+    };
+
+    function updateTimeDisplay() {
+      const current = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+      timeDisplay.textContent = `${toFixed3(current)} / ${toFixed3(duration)}`;
+      seekBar.max = String(duration);
+      seekBar.value = String(current);
+      highlightActiveLyric(current);
+    }
+
+    function clampTime(time) {
+      const max = Number.isFinite(audio.duration) ? audio.duration : Infinity;
+      return Math.min(Math.max(time, 0), max);
+    }
+
+    function renderLyrics() {
+      lyricsList.innerHTML = '';
+      lyrics.forEach((line, index) => {
+        const row = document.createElement('div');
+        row.className = 'lyric-row';
+        row.dataset.index = String(index);
+
+        const controls = document.createElement('div');
+        controls.className = 'lyric-controls';
+
+        const textInput = document.createElement('input');
+        textInput.type = 'text';
+        textInput.value = line.text;
+        textInput.placeholder = 'Lyric text';
+        textInput.addEventListener('input', () => {
+          line.text = textInput.value;
+        });
+
+        const startInput = document.createElement('input');
+        startInput.type = 'number';
+        startInput.step = '0.001';
+        startInput.min = '0';
+        startInput.placeholder = 'Start';
+        startInput.value = line.start !== null ? toFixed3(line.start) : '';
+        startInput.addEventListener('change', () => {
+          line.start = parseTimeValue(startInput.value);
+          if (line.start !== null) {
+            line.start = Math.max(0, line.start);
+            startInput.value = toFixed3(line.start);
+          }
+          highlightActiveLyric(audio.currentTime);
+        });
+
+        const endInput = document.createElement('input');
+        endInput.type = 'number';
+        endInput.step = '0.001';
+        endInput.min = '0';
+        endInput.placeholder = 'End';
+        endInput.value = line.end !== null ? toFixed3(line.end) : '';
+        endInput.addEventListener('change', () => {
+          line.end = parseTimeValue(endInput.value);
+          if (line.end !== null) {
+            line.end = Math.max(0, line.end);
+            endInput.value = toFixed3(line.end);
+          }
+          highlightActiveLyric(audio.currentTime);
+        });
+
+        const setStartBtn = document.createElement('button');
+        setStartBtn.textContent = 'Set Start';
+        setStartBtn.addEventListener('click', () => {
+          line.start = audio.currentTime;
+          startInput.value = toFixed3(line.start);
+          highlightActiveLyric(audio.currentTime);
+        });
+
+        const setEndBtn = document.createElement('button');
+        setEndBtn.textContent = 'Set End';
+        setEndBtn.addEventListener('click', () => {
+          line.end = audio.currentTime;
+          endInput.value = toFixed3(line.end);
+          highlightActiveLyric(audio.currentTime);
+        });
+
+        controls.append(textInput, startInput, endInput, setStartBtn, setEndBtn);
+        row.append(controls);
+        lyricsList.append(row);
+      });
+
+      highlightActiveLyric(audio.currentTime);
+    }
+
+    function highlightActiveLyric(currentTime) {
+      const rows = Array.from(lyricsList.querySelectorAll('.lyric-row'));
+      rows.forEach((row, idx) => {
+        const line = lyrics[idx];
+        const isActive = line && line.start !== null && line.end !== null && currentTime >= line.start && currentTime <= line.end;
+        row.classList.toggle('active', Boolean(isActive));
+      });
+    }
+
+    audioInput.addEventListener('change', () => {
+      const [file] = audioInput.files || [];
+      if (!file) return;
+      const objectUrl = URL.createObjectURL(file);
+      audio.src = objectUrl;
+      audioName.textContent = file.name;
+      audio.load();
+      playPauseBtn.textContent = 'Play';
+    });
+
+    playPauseBtn.addEventListener('click', () => {
+      if (!audio.src) return;
+      if (audio.paused) {
+        audio.play();
+      } else {
+        audio.pause();
+      }
+    });
+
+    audio.addEventListener('play', () => {
+      playPauseBtn.textContent = 'Pause';
+    });
+
+    audio.addEventListener('pause', () => {
+      playPauseBtn.textContent = 'Play';
+    });
+
+    audio.addEventListener('timeupdate', updateTimeDisplay);
+    audio.addEventListener('loadedmetadata', updateTimeDisplay);
+    audio.addEventListener('durationchange', updateTimeDisplay);
+
+    seekBar.addEventListener('input', () => {
+      const value = parseFloat(seekBar.value);
+      audio.currentTime = clampTime(value);
+      updateTimeDisplay();
+    });
+
+    jumpButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const offset = Number(button.dataset.jump);
+        audio.currentTime = clampTime(audio.currentTime + offset);
+        updateTimeDisplay();
+      });
+    });
+
+    loadLyricsBtn.addEventListener('click', () => {
+      const lines = lyricsInput.value
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      lyrics.length = 0;
+      lines.forEach((line) => {
+        lyrics.push({ text: line, start: null, end: null });
+      });
+
+      renderLyrics();
+    });
+
+    exportBtn.addEventListener('click', () => {
+      const output = lyrics
+        .filter((line) => line.text.trim().length > 0)
+        .map((line) => {
+          const start = line.start !== null ? toFixed3(line.start) : '0.000';
+          const end = line.end !== null ? toFixed3(line.end) : '0.000';
+          return `${start}|${end}|${line.text}`;
+        })
+        .join('\n');
+
+      exportOutput.value = output;
+    });
+
+    updateTimeDisplay();
+  </script>
 </body>
 </html>
