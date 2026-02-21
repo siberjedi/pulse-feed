@@ -177,16 +177,22 @@
 
     .lyric-controls {
       display: grid;
-      grid-template-columns: 1fr 94px 94px auto auto;
-      gap: 0.35rem;
+      grid-template-columns: minmax(320px, 1fr) 150px 150px auto auto;
+      gap: 0.45rem;
       align-items: center;
     }
 
     .time-field {
       display: grid;
-      grid-template-columns: 1fr auto auto;
+      grid-template-rows: auto auto;
       gap: 0.2rem;
       align-items: center;
+    }
+
+    .time-adjust {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.2rem;
     }
 
     .small {
@@ -399,9 +405,12 @@
           rerenderAll();
         });
 
+        const startAdjust = document.createElement('div');
+        startAdjust.className = 'time-adjust';
+
         const startMinus = document.createElement('button');
         startMinus.className = 'tiny';
-        startMinus.textContent = '-0.1';
+        startMinus.textContent = '-0.1s';
         startMinus.addEventListener('click', () => {
           line.start = line.start === null ? Math.max(0, audio.currentTime - 0.1) : Math.max(0, line.start - 0.1);
           normalizeTimes(line);
@@ -410,14 +419,15 @@
 
         const startPlus = document.createElement('button');
         startPlus.className = 'tiny';
-        startPlus.textContent = '+0.1';
+        startPlus.textContent = '+0.1s';
         startPlus.addEventListener('click', () => {
           line.start = line.start === null ? audio.currentTime + 0.1 : line.start + 0.1;
           normalizeTimes(line);
           rerenderAll();
         });
 
-        startWrap.append(startInput, startMinus, startPlus);
+        startAdjust.append(startMinus, startPlus);
+        startWrap.append(startInput, startAdjust);
 
         const endWrap = document.createElement('div');
         endWrap.className = 'time-field';
@@ -434,9 +444,12 @@
           rerenderAll();
         });
 
+        const endAdjust = document.createElement('div');
+        endAdjust.className = 'time-adjust';
+
         const endMinus = document.createElement('button');
         endMinus.className = 'tiny';
-        endMinus.textContent = '-0.1';
+        endMinus.textContent = '-0.1s';
         endMinus.addEventListener('click', () => {
           line.end = line.end === null ? Math.max(0, audio.currentTime - 0.1) : Math.max(0, line.end - 0.1);
           normalizeTimes(line);
@@ -445,14 +458,15 @@
 
         const endPlus = document.createElement('button');
         endPlus.className = 'tiny';
-        endPlus.textContent = '+0.1';
+        endPlus.textContent = '+0.1s';
         endPlus.addEventListener('click', () => {
           line.end = line.end === null ? audio.currentTime + 0.1 : line.end + 0.1;
           normalizeTimes(line);
           rerenderAll();
         });
 
-        endWrap.append(endInput, endMinus, endPlus);
+        endAdjust.append(endMinus, endPlus);
+        endWrap.append(endInput, endAdjust);
 
         const setStartBtn = document.createElement('button');
         setStartBtn.textContent = 'Başlangıcı Ayarla';
