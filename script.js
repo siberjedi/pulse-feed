@@ -116,18 +116,67 @@
     return `${m}:${String(sec).padStart(2, '0')}`;
   }
 
+  function normalizeToken(value) {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9ığüşöçİĞÜŞÖÇ]+/gi, '');
+  }
+
+  function resolveEffectToken(token) {
+    const raw = String(token || '').trim();
+    if (!raw) return 'effect-fade';
+    const direct = EFFECTS.find(([value]) => value === raw);
+    if (direct) return direct[0];
+
+    const normalized = normalizeToken(raw);
+    const byLabel = EFFECTS.find(([value, label]) => normalizeToken(label) === normalized || normalizeToken(value) === normalized);
+    return byLabel ? byLabel[0] : 'effect-fade';
+  }
+
+  function resolveFontIdToken(token) {
+    const raw = String(token || '').trim();
+    if (!raw) return '';
+    const exact = state.config.fonts.find((font) => font.id === raw || font.name === raw || font.family === raw);
+    if (exact) return exact.id;
+    const normalized = normalizeToken(raw);
+    const matched = state.config.fonts.find((font) => (
+      normalizeToken(font.id) === normalized
+      || normalizeToken(font.name) === normalized
+      || normalizeToken(font.family) === normalized
+    ));
+    return matched ? matched.id : '';
+  }
+
+  function resolveLyricFontHints() {
+    state.config.lyrics = state.config.lyrics.map((line) => {
+      if (line.fontId) return line;
+      const resolved = resolveFontIdToken(line.fontHint);
+      if (!resolved) return line;
+      return { ...line, fontId: resolved };
+    });
+  }
+
   function parseLyrics(raw) {
     return raw
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const [start, end, ...textParts] = line.split('|');
-        const text = textParts.join('|').trim();
+        const [start, end, text = '', font = '', effect = ''] = line.split('|');
         const startNum = Number(start);
         const endNum = Number(end);
-        if (!Number.isFinite(startNum) || !Number.isFinite(endNum) || !text) return null;
-        return { id: uid(), start: startNum, end: endNum, text, effect: 'effect-fade', fontId: '', textColor: '#ffffff', outlineColor: '#000000', outlineWidth: 3 };
+        const cleanText = text.trim();
+        if (!Number.isFinite(startNum) || !Number.isFinite(endNum) || !cleanText) return null;
+        return {
+          id: uid(),
+          start: startNum,
+          end: endNum,
+          text: cleanText,
+          effect: resolveEffectToken(effect),
+          fontId: resolveFontIdToken(font),
+          fontHint: String(font || '').trim(),
+          textColor: '#ffffff',
+          outlineColor: '#000000',
+          outlineWidth: 3,
+        };
       })
       .filter(Boolean)
       .sort((a, b) => a.start - b.start);
@@ -317,6 +366,7 @@
     }
 
     function renderLyrics() {
+      resolveLyricFontHints();
       el.applyAllEffect.innerHTML = effectOptionsWithRandom('');
       el.applyAllFont.innerHTML = `<option value="">Seçin</option>${fontOptions('', false, true)}`;
 
@@ -562,6 +612,7 @@
         const row = state.config.lyrics.find((x) => x.id === fontSel.getAttribute('data-line-font'));
         if (row) {
           row.fontId = fontSel.value;
+          row.fontHint = '';
           markSaved('Lyric fontu kaydedildi');
         }
       }
@@ -615,9 +666,9 @@
           return;
         }
         const selected = pickRandomStableByText(state.config.lyrics, () => fontValues[Math.floor(Math.random() * fontValues.length)]);
-        state.config.lyrics = state.config.lyrics.map((x, idx) => ({ ...x, fontId: selected[idx] }));
+        state.config.lyrics = state.config.lyrics.map((x, idx) => ({ ...x, fontId: selected[idx], fontHint: '' }));
       } else {
-        state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, fontId: el.applyAllFont.value }));
+        state.config.lyrics = state.config.lyrics.map((x) => ({ ...x, fontId: el.applyAllFont.value, fontHint: '' }));
       }
       renderLyrics();
       markSaved('Tüm lyric fontları kaydedildi');
