@@ -154,13 +154,26 @@
     });
   }
 
+  function resolveColorToken(value, fallback) {
+    const raw = String(value || '').trim();
+    if (!raw) return fallback;
+    if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw;
+    return fallback;
+  }
+
+  function resolveOutlineWidthToken(value, fallback = 3) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.min(32, n));
+  }
+
   function parseLyrics(raw) {
     return raw
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const [start, end, text = '', font = '', effect = ''] = line.split('|');
+        const [start, end, text = '', font = '', effect = '', typeColor = '', typeOutlineColor = '', typeOutlineThickness = ''] = line.split('|');
         const startNum = Number(start);
         const endNum = Number(end);
         const cleanText = text.trim();
@@ -173,9 +186,9 @@
           effect: resolveEffectToken(effect),
           fontId: resolveFontIdToken(font),
           fontHint: String(font || '').trim(),
-          textColor: '#ffffff',
-          outlineColor: '#000000',
-          outlineWidth: 3,
+          textColor: resolveColorToken(typeColor, '#ffffff'),
+          outlineColor: resolveColorToken(typeOutlineColor, '#000000'),
+          outlineWidth: resolveOutlineWidthToken(typeOutlineThickness, 3),
         };
       })
       .filter(Boolean)
