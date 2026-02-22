@@ -1244,6 +1244,17 @@
           if (event.data?.size) state.chunks.push(event.data);
         };
         state.mediaRecorder.onstop = async () => {
+          if (!state.chunks.length) {
+            alert('Kayıt verisi oluşmadı. Lütfen tekrar deneyin.');
+            setRecordingUI(false);
+            state.stream?.getTracks().forEach((t) => t.stop());
+            state.stream = null;
+            state.recordTarget = null;
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+            applyModeVisibility();
+            return;
+          }
+
           const rawBlob = new Blob(state.chunks, { type: 'video/webm' });
           let finalBlob = rawBlob;
           try {
@@ -1254,7 +1265,9 @@
           }
 
           el.downloadRecord.href = URL.createObjectURL(finalBlob);
+          el.downloadRecord.download = page === 'mobile' ? 'lyric-video-mobile.webm' : 'lyric-video.webm';
           el.downloadRecord.classList.remove('hidden');
+          el.downloadRecord.click();
           el.recordBtn.textContent = '🎥 Fullscreen Kayda Başla';
           setRecordingUI(false);
           state.stream?.getTracks().forEach((t) => t.stop());
@@ -1277,6 +1290,11 @@
 
     function stopRecording() {
       if (!state.mediaRecorder || state.mediaRecorder.state === 'inactive') return;
+      try {
+        state.mediaRecorder.requestData();
+      } catch {
+        // ignore requestData errors close to stop
+      }
       state.mediaRecorder.stop();
     }
 
