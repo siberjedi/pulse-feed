@@ -57,7 +57,6 @@
     recordTarget: null,
     downloadUrl: '',
     recordMime: 'video/webm',
-    recordExt: 'webm',
   };
 
   function uid() {
@@ -1168,14 +1167,11 @@
 
         state.chunks = [];
         const preferredMime = [
-          'video/mp4;codecs=avc1.42E01E',
-          'video/mp4',
           'video/webm;codecs=vp8',
           'video/webm;codecs=vp9',
           'video/webm',
         ].find((mime) => MediaRecorder.isTypeSupported(mime)) || 'video/webm';
         state.recordMime = preferredMime;
-        state.recordExt = preferredMime.startsWith('video/mp4') ? 'mp4' : 'webm';
         state.mediaRecorder = new MediaRecorder(state.stream, {
           mimeType: preferredMime,
           videoBitsPerSecond: getRecordingPrefs().bitrate,
@@ -1202,9 +1198,7 @@
           }
           state.downloadUrl = URL.createObjectURL(finalBlob);
           el.downloadRecord.href = state.downloadUrl;
-          el.downloadRecord.download = page === 'mobile'
-            ? `lyric-video-mobile.${state.recordExt}`
-            : `lyric-video.${state.recordExt}`;
+          el.downloadRecord.download = page === 'mobile' ? 'lyric-video-mobile.webm' : 'lyric-video.webm';
           el.downloadRecord.classList.remove('hidden');
           el.downloadRecord.click();
           el.recordBtn.textContent = '🎥 Fullscreen Kayda Başla';
