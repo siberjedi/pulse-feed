@@ -56,6 +56,7 @@
     isRecording: false,
     recordTarget: null,
     downloadUrl: '',
+    recordMime: 'video/webm',
   };
 
   function uid() {
@@ -1165,9 +1166,10 @@
         state.recordTarget = { width: targetWidth, height: targetHeight };
 
         state.chunks = [];
-        const preferredMime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-          ? 'video/webm;codecs=vp9'
-          : 'video/webm';
+        const preferredMime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+          ? 'video/webm;codecs=vp8'
+          : (MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm');
+        state.recordMime = preferredMime;
         state.mediaRecorder = new MediaRecorder(state.stream, {
           mimeType: preferredMime,
           videoBitsPerSecond: getRecordingPrefs().bitrate,
@@ -1187,7 +1189,7 @@
             return;
           }
 
-          const finalBlob = new Blob(state.chunks, { type: 'video/webm' });
+          const finalBlob = new Blob(state.chunks, { type: state.recordMime.split(';')[0] || 'video/webm' });
           if (state.downloadUrl) {
             URL.revokeObjectURL(state.downloadUrl);
             state.downloadUrl = '';
@@ -1206,7 +1208,7 @@
           applyModeVisibility();
         };
 
-        state.mediaRecorder.start();
+        state.mediaRecorder.start(1000);
         setRecordingUI(true);
         el.recordBtn.textContent = '⏹ Kaydı Durdur';
         if (!state.config.song.showPlayer) el.musicPlayer.classList.add('hidden');
