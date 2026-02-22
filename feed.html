@@ -1,71 +1,43 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse Feed</title>
+  <title>Pulse Feed • Lyric Video</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body data-page="feed">
-  <div class="layout">
-    <aside class="sidebar left-sidebar" aria-label="Navigation">
-      <div class="left-brand">
-        <img src="PulseWhite.svg" alt="Pulse logo" class="left-brand-logo" />
-        <h2>Pulse</h2>
-      </div>
+<body data-page="feed" class="desktop-page">
+  <div class="desktop-shell">
+  <main class="feed-stage desktop-stage" id="feedStage">
+    <div id="backgroundLayer" class="background-layer"></div>
+    <div class="overlay-shade"></div>
 
-      <nav class="menu" aria-label="Main menu">
-        <a href="feed.html">Anasayfa</a>
-        <a href="feed.html">Keşfet</a>
-        <a href="feed.html">Bildirimler</a>
-        <a href="feed.html">Mesajlar</a>
-        <a href="feed.html">Premium $</a>
-      </nav>
-    </aside>
+    <section class="visualizer-zone top-zone"><canvas id="visualizerTop"></canvas></section>
+    <section class="lyrics-zone" id="lyricsZone"><div id="lyricLine" class="lyric-line"></div></section>
+    <section class="visualizer-zone bottom-zone"><canvas id="visualizerBottom"></canvas></section>
 
-    <main class="app-shell">
-      <header class="top-bar">
-        <div class="brand">
-          <img src="PulseWhite.svg" alt="Pulse logo" class="brand-logo" />
-          <h1>Pulse</h1>
-        </div>
-        <div class="mode-switch" role="tablist" aria-label="Mode switch">
-          <a href="admin.html" class="tab-btn">Composer / Admin</a>
-          <a href="feed.html" class="tab-btn active">Feed</a>
-        </div>
-      </header>
+    <article id="musicPlayer" class="music-player">
+      <div class="mini-visualizer"><canvas id="playerViz"></canvas></div>
+      <h3 id="playerSongName">Şarkı yüklenmedi</h3>
+      <p class="artist">PulseFeed</p>
+      <div class="time-row"><span id="currentTime">0:00</span><span id="duration">0:00</span></div>
+      <input id="seekBar" type="range" min="0" max="100" value="0" />
+      <div class="button-row player-buttons"><button id="playBtn" type="button">▶</button></div>
+    </article>
 
-      <section class="panel" aria-label="Pulse feed mode">
-        <div class="feed-controls">
-          <label class="checkbox-line">
-            <input id="autoScrollEnabled" type="checkbox" checked />
-            Auto-scroll
-          </label>
+    <div class="feed-tools">
+      <a class="nav-btn" href="admin.html">Admin</a>
+      <a class="nav-btn" href="mobile.html">Mobile 9:16</a>
+      <button id="stagePlayBtn" type="button">▶ Müziği Başlat / Durdur</button>
+      <button id="recordBtn" type="button">🎥 Fullscreen Kayda Başla</button>
+      <button id="panelRecordBtn" type="button">🎬 Sadece Paneli Kaydet (4K)</button>
+      <a id="downloadRecord" class="nav-btn hidden" download="lyric-video.webm">Kaydı İndir</a>
+    </div>
 
-          <label>
-            Speed
-            <input id="scrollSpeed" type="range" min="10" max="90" value="34" />
-          </label>
 
-          <label class="checkbox-line">
-            <input id="pauseAtPosts" type="checkbox" checked />
-            Pause at posts
-          </label>
-        </div>
-
-        <section id="feed" class="feed" aria-label="Feed timeline"></section>
-      </section>
-    </main>
-
-    <aside class="sidebar right-sidebar" aria-label="Discover and follow">
-      <input id="searchInput" type="text" placeholder="Ara..." class="search-input" />
-      <section class="suggestions">
-        <h3>Takip önerileri</h3>
-        <div id="suggestionsList"></div>
-      </section>
-    </aside>
+    <audio id="audio" crossorigin="anonymous"></audio>
+  </main>
   </div>
-
   <script src="script.js"></script>
 </body>
 </html>
