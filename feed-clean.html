@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse Feed • Lyric Video</title>
+  <title>Pulse Feed • Kayıtsız Sahne</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body data-page="feed" class="desktop-page">
+<body data-page="feed-norec" class="desktop-page">
   <div class="desktop-shell">
   <main class="feed-stage desktop-stage" id="feedStage">
     <div id="backgroundLayer" class="background-layer"></div>
@@ -27,13 +27,10 @@
 
     <div class="feed-tools">
       <a class="nav-btn" href="admin.html">Admin</a>
+      <a class="nav-btn" href="feed.html">Kayıtlı Feed</a>
       <a class="nav-btn" href="mobile.html">Mobile 9:16</a>
       <button id="stagePlayBtn" type="button">▶ Müziği Başlat / Durdur</button>
-      <button id="recordBtn" type="button">🎥 Fullscreen Kayda Başla</button>
-      <button id="panelRecordBtn" type="button">🎬 Sadece Paneli Kaydet (4K)</button>
-      <a id="downloadRecord" class="nav-btn hidden" download="lyric-video.webm">Kaydı İndir</a>
     </div>
-
 
     <audio id="audio" crossorigin="anonymous"></audio>
   </main>

@@ -1,126 +1,133 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse Admin</title>
+  <title>Pulse Feed • Admin</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body data-page="admin">
-  <div class="layout">
-    <aside class="sidebar left-sidebar" aria-label="Navigation">
-      <div class="left-brand">
-        <img src="PulseWhite.svg" alt="Pulse logo" class="left-brand-logo" />
-        <h2>Pulse</h2>
+  <div class="admin-layout">
+    <header class="panel top-header">
+      <div>
+        <h1>Lyric Video Admin</h1>
+        <p>Her bölüm bağımsız kaydolur. Sadece müzik ekleyip kaydedebilir, diğerlerini sonra doldurabilirsiniz.</p>
       </div>
+      <div class="button-row">
+        <a class="nav-btn" href="feed.html">Feed sayfasına geç</a>
+        <a class="nav-btn" href="feed-clean.html">Kayıtsız Feed</a>
+      </div>
+    </header>
 
-      <nav class="menu" aria-label="Main menu">
-        <a href="feed.html">Anasayfa</a>
-        <a href="feed.html">Keşfet</a>
-        <a href="feed.html">Bildirimler</a>
-        <a href="feed.html">Mesajlar</a>
-        <a href="feed.html">Premium $</a>
-      </nav>
-    </aside>
+    <section class="panel">
+      <h2>1) Şarkı ve Oynatıcı Ayarları</h2>
+      <div class="grid two">
+        <label>Şarkı dosyası (.mp3, .wav)
+          <input id="songFile" type="file" accept="audio/mpeg,audio/wav,.mp3,.wav" />
+        </label>
+        <label>Şarkı adı
+          <input id="songTitle" type="text" placeholder="Şarkı adı" />
+        </label>
+      </div>
+      <div class="grid two">
+        <label class="checkbox-line"><input id="showPlayerToggle" type="checkbox" checked /> Feed'de player görünsün</label>
+        <label class="checkbox-line"><input id="visualizerWithSongToggle" type="checkbox" /> Şarkı ile visualizer kullan</label>
+      </div>
+      <p id="songInfo" class="hint">Henüz şarkı yüklenmedi.</p>
+      <div class="section-actions"><button type="button" data-save-section="song">Şarkı ayarlarını kaydet</button></div>
+    </section>
 
-    <main class="app-shell">
-      <header class="top-bar">
-        <div class="brand">
-          <img src="PulseWhite.svg" alt="Pulse logo" class="brand-logo" />
-          <h1>Pulse</h1>
-        </div>
-        <div class="mode-switch" role="tablist" aria-label="Mode switch">
-          <a href="admin.html" class="tab-btn active">Composer / Admin</a>
-          <a href="feed.html" class="tab-btn">Feed</a>
-        </div>
-      </header>
+    <section class="panel">
+      <h2>2) Visualizer Ayarları</h2>
+      <div class="grid three">
+        <label class="checkbox-line"><input id="visualizerEnabled" type="checkbox" /> Visualizer açık</label>
+        <label>Tür
+          <select id="visualizerType">
+            <option value="bar">Bar visualizer</option>
+            <option value="wave">Wave visualizer</option>
+            <option value="particle">Particle / Abstract visualizer</option>
+          </select>
+        </label>
+        <label>Renk
+          <input id="visualizerColor" type="color" value="#5f87ff" />
+        </label>
+      </div>
+      <div class="section-actions"><button type="button" data-save-section="visualizer">Visualizer ayarlarını kaydet</button></div>
+    </section>
 
-      <section class="panel" aria-label="Composer and admin mode">
-        <h2>Create content</h2>
-        <form id="composerForm" class="composer-form">
-          <label>
-            Post text
-            <textarea id="postText" rows="4" placeholder="Write a post or comment..." required></textarea>
-          </label>
+    <section class="panel">
+      <h2>3) Arkaplan Video / Renk</h2>
+      <div class="grid three">
+        <label>Arkaplan videosu ekle (gif/mp4/mkv/webm)
+          <input id="backgroundFiles" type="file" accept="video/mp4,video/webm,video/x-matroska,image/gif,.mp4,.webm,.mkv,.gif" multiple />
+        </label>
+        <label>Oynatma modu
+          <select id="backgroundMode"><option value="loop">Loop (tek video)</option><option value="list">Liste (sıralı)</option></select>
+        </label>
+        <label>Video yoksa arkaplan rengi
+          <input id="backgroundColor" type="color" value="#040812" />
+        </label>
+      </div>
+      <div id="backgroundList" class="list-box"></div>
+      <div class="section-actions"><button type="button" data-save-section="background">Arkaplan ayarlarını kaydet</button></div>
+    </section>
 
-          <div class="form-row">
-            <label>
-              Post type
-              <select id="postType">
-                <option value="post">Post</option>
-                <option value="comment">Comment</option>
-              </select>
-            </label>
+    <section class="panel">
+      <h2>4) Lyrics ve Timestamp</h2>
+      <label>Giriş formatı: <code>start|end|lyric|font|effect|typecolor|typeoutlinecolor|typeoutlinethickness</code> (satır satır)
+        <textarea id="lyricsInput" rows="6" placeholder="2.100|3.800|Jedi Records...|Inter|effect-fade|#ffffff|#000000|3\n5.009|5.900|Bu Bina Sağlam...|MyFont|Glitch Effect|#ffde59|#111111|5"></textarea>
+      </label>
+      <div class="button-row">
+        <button id="parseLyricsBtn" type="button">Lyrics Parse Et</button>
+        <button id="clearLyricsBtn" type="button">Tüm Lyrics'i Sil</button>
+        <label>Tümüne efekt uygula <select id="applyAllEffect"></select></label>
+        <label>Tümüne font uygula <select id="applyAllFont"></select></label>
+        <label>Tümüne yazı rengi uygula <input id="applyAllTextColor" type="color" value="#ffffff" /></label>
+        <label>Tümüne outline rengi uygula <input id="applyAllOutlineColor" type="color" value="#000000" /></label>
+        <label>Tümüne outline kalınlığı uygula <input id="applyAllOutlineWidth" type="range" min="0" max="14" step="1" value="3" /></label>
+      </div>
+      <div class="button-row">
+        <label>Desktop lyric boyut ölçeği
+          <input id="desktopLyricScale" type="number" min="12" step="0.5" value="12" />
+        </label>
+        <label>Mobile lyric boyut ölçeği
+          <input id="mobileLyricScale" type="number" min="12" step="0.5" value="12" />
+        </label>
+        <label class="checkbox-line"><input id="mobileFullWidthLyrics" type="checkbox" /> Mobilde lyric alanı tam genişlikte</label>
+      </div>
+      <div id="lyricsTable" class="lyrics-table"></div>
+      <p class="hint">Boyut alanına yazdığınız sayı doğrudan yazı boyutu (px) olarak uygulanır; yalnızca taşma olursa otomatik küçültülür.</p>
+      <div class="section-actions"><button type="button" data-save-section="lyrics">Lyric ayarlarını kaydet</button></div>
+    </section>
 
-            <label>
-              Parent post (for comments)
-              <select id="parentPostSelect">
-                <option value="">None</option>
-              </select>
-            </label>
-          </div>
+    <section class="panel">
+      <h2>5) Font Yükleme</h2>
+      <label>Font dosyaları (woff/woff2/ttf/otf), toplu yükleme destekli
+        <input id="fontFiles" type="file" accept=".woff,.woff2,.ttf,.otf,font/woff,font/woff2,font/ttf,font/otf" multiple />
+      </label>
+      <div id="fontPreviewList" class="font-preview-list"></div>
+      <div class="section-actions"><button type="button" data-save-section="fonts">Font ayarlarını kaydet</button></div>
+    </section>
 
-          <div class="form-row">
-            <label>
-              Image / GIF / video thumbnail
-              <input id="mediaFile" type="file" accept="image/*,video/*" />
-            </label>
+    <section class="panel">
+      <h2>6) Kayıt Performans Ayarları</h2>
+      <div class="grid two">
+        <label>Kayıt FPS
+          <input id="recordFps" type="number" min="12" max="120" step="1" value="60" />
+        </label>
+        <label>Kayıt Bitrate (Mbps)
+          <input id="recordBitrateMbps" type="number" min="4" max="120" step="1" value="80" />
+        </label>
+      </div>
+      <p class="hint">Daha düşük FPS/bitrate seçimi uzun kayıtlarda sayfa takılmasını azaltır.</p>
+      <div class="section-actions"><button type="button" data-save-section="recording">Kayıt ayarlarını kaydet</button></div>
+    </section>
 
-            <label class="checkbox-line">
-              <input id="isSponsored" type="checkbox" />
-              Mark as Sponsored
-            </label>
-          </div>
-
-          <div class="form-row">
-            <label>
-              Author handle
-              <input id="authorHandle" type="text" value="@studio.pulse" />
-            </label>
-
-            <label>
-              Header line
-              <input id="authorSubMeta" type="text" value="music video draft" />
-            </label>
-          </div>
-
-          <button class="publish-btn" type="submit">Publish</button>
-        </form>
-
-        <section class="manager" aria-label="Content manager">
-          <h2>Manage posts & comments</h2>
-          <div id="manageList" class="manage-list"></div>
-        </section>
-
-        <section class="manager" aria-label="Suggestion manager">
-          <h2>Manage follow suggestions</h2>
-          <form id="suggestionForm" class="composer-form compact">
-            <div class="form-row">
-              <label>
-                Handle
-                <input id="suggestionHandle" type="text" placeholder="@new.creator" required />
-              </label>
-              <label>
-                Bio
-                <input id="suggestionBio" type="text" placeholder="short bio" required />
-              </label>
-            </div>
-            <button class="publish-btn" type="submit">Add suggestion</button>
-          </form>
-          <div id="suggestionManageList" class="manage-list"></div>
-        </section>
-      </section>
-    </main>
-
-    <aside class="sidebar right-sidebar" aria-label="Discover and follow">
-      <input id="searchInput" type="text" placeholder="Ara..." class="search-input" />
-      <section class="suggestions">
-        <h3>Takip önerileri</h3>
-        <div id="suggestionsList"></div>
-      </section>
-    </aside>
+    <section class="panel sticky-footer">
+      <button id="saveAllBtn" type="button" class="primary">Tüm ayarları kaydet</button>
+      <span id="saveStatus" class="hint"></span>
+    </section>
   </div>
-
   <script src="script.js"></script>
 </body>
 </html>
