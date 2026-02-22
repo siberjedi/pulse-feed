@@ -1146,6 +1146,18 @@
       if (Number.isFinite(el.audio.duration) && el.audio.duration > 0) {
         el.seekBar.value = String((el.audio.currentTime / el.audio.duration) * 100);
       }
+
+      maybeStopRecordingAtSongEnd();
+    }
+
+    function maybeStopRecordingAtSongEnd() {
+      if (!state.mediaRecorder || state.mediaRecorder.state !== 'recording') return;
+      const duration = Number(el.audio.duration);
+      const current = Number(el.audio.currentTime);
+      const reachedEndByTime = Number.isFinite(duration) && duration > 0 && current >= (duration - 0.08);
+      if (el.audio.ended || reachedEndByTime) {
+        stopRecording();
+      }
     }
 
     async function togglePlay() {
@@ -1305,7 +1317,11 @@
     el.audio.addEventListener('ended', () => {
       el.playBtn.textContent = '▶';
       el.stagePlayBtn.textContent = '▶ Müziği Başlat';
-      if (state.mediaRecorder && state.mediaRecorder.state === 'recording') stopRecording();
+      maybeStopRecordingAtSongEnd();
+    });
+
+    el.audio.addEventListener('pause', () => {
+      maybeStopRecordingAtSongEnd();
     });
 
     el.seekBar.addEventListener('input', () => {
