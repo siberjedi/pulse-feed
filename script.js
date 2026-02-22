@@ -55,6 +55,7 @@
     stopOnTapHandler: null,
     isRecording: false,
     recordTarget: null,
+    downloadUrl: '',
   };
 
   function uid() {
@@ -1020,87 +1021,6 @@
       el.lyricLine.style.fontSize = `${size}px`;
     }
 
-    function drawCoverFrame(ctx, source, targetW, targetH) {
-      const srcW = source.videoWidth || source.width;
-      const srcH = source.videoHeight || source.height;
-      if (!srcW || !srcH) {
-        ctx.clearRect(0, 0, targetW, targetH);
-        return;
-      }
-      const scale = Math.max(targetW / srcW, targetH / srcH);
-      const drawW = srcW * scale;
-      const drawH = srcH * scale;
-      const offsetX = (targetW - drawW) / 2;
-      const offsetY = (targetH - drawH) / 2;
-      ctx.clearRect(0, 0, targetW, targetH);
-      ctx.drawImage(source, offsetX, offsetY, drawW, drawH);
-    }
-
-    async function normalizeRecordingBlob(blob, width, height) {
-      const { fps, bitrate } = getRecordingPrefs();
-      const blobUrl = URL.createObjectURL(blob);
-      const playback = document.createElement('video');
-      playback.src = blobUrl;
-      playback.muted = true;
-      playback.playsInline = true;
-
-      await new Promise((resolve, reject) => {
-        playback.onloadedmetadata = () => resolve();
-        playback.onerror = () => reject(new Error('metadata-load-failed'));
-      });
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      const stream = canvas.captureStream(fps);
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : 'video/webm';
-      const chunks = [];
-
-      const outputBlob = await new Promise(async (resolve, reject) => {
-        const recorder = new MediaRecorder(stream, {
-          mimeType,
-          videoBitsPerSecond: bitrate,
-        });
-
-        let raf = 0;
-        const draw = () => {
-          drawCoverFrame(ctx, playback, width, height);
-          if (!playback.paused && !playback.ended) {
-            raf = requestAnimationFrame(draw);
-          }
-        };
-
-        recorder.ondataavailable = (event) => {
-          if (event.data?.size) chunks.push(event.data);
-        };
-
-        recorder.onerror = () => {
-          cancelAnimationFrame(raf);
-          reject(new Error('normalize-recorder-failed'));
-        };
-
-        recorder.onstop = () => {
-          cancelAnimationFrame(raf);
-          resolve(new Blob(chunks, { type: 'video/webm' }));
-        };
-
-        playback.onended = () => {
-          if (recorder.state !== 'inactive') recorder.stop();
-        };
-
-        recorder.start(120);
-        await playback.play();
-        draw();
-      });
-
-      stream.getTracks().forEach((track) => track.stop());
-      URL.revokeObjectURL(blobUrl);
-      return outputBlob;
-    }
-
     function activateLyric(line) {
       fitLyric(line.text, pickFont(line.fontId));
       const dur = Math.max(0.2, line.end - line.start);
@@ -1255,7 +1175,7 @@
         state.mediaRecorder.ondataavailable = (event) => {
           if (event.data?.size) state.chunks.push(event.data);
         };
-        state.mediaRecorder.onstop = async () => {
+        state.mediaRecorder.onstop = () => {
           if (!state.chunks.length) {
             alert('Kayıt verisi oluşmadı. Lütfen tekrar deneyin.');
             setRecordingUI(false);
@@ -1267,16 +1187,13 @@
             return;
           }
 
-          const rawBlob = new Blob(state.chunks, { type: 'video/webm' });
-          let finalBlob = rawBlob;
-          try {
-            const target = state.recordTarget || targetStageSize;
-            finalBlob = await normalizeRecordingBlob(rawBlob, target.width, target.height);
-          } catch {
-            alert('Kayıt alındı ancak yeniden boyutlandırma başarısız oldu. Ham kayıt indirilecek.');
+          const finalBlob = new Blob(state.chunks, { type: 'video/webm' });
+          if (state.downloadUrl) {
+            URL.revokeObjectURL(state.downloadUrl);
+            state.downloadUrl = '';
           }
-
-          el.downloadRecord.href = URL.createObjectURL(finalBlob);
+          state.downloadUrl = URL.createObjectURL(finalBlob);
+          el.downloadRecord.href = state.downloadUrl;
           el.downloadRecord.download = page === 'mobile' ? 'lyric-video-mobile.webm' : 'lyric-video.webm';
           el.downloadRecord.classList.remove('hidden');
           el.downloadRecord.click();
