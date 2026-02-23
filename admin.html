@@ -1,126 +1,81 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse Admin</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Satranç Admin</title>
+  <style>
+    body{margin:0;background:#1f2025;color:#e8ebf1;font-family:Inter,Arial,sans-serif;padding:20px}
+    .wrap{max-width:1000px;margin:auto;display:grid;gap:14px}.panel{background:#2b2d33;border:1px solid #43464f;border-radius:12px;padding:14px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}label{font-size:13px;color:#b9c0cf;display:grid;gap:6px}
+    input,button{background:#353841;color:#e8ebf1;border:1px solid #585c69;border-radius:8px;padding:8px 10px}button{cursor:pointer}
+    .row{display:flex;gap:8px;flex-wrap:wrap}.ok{color:#44d17d}.muted{color:#aeb6c4}
+    @media(max-width:760px){.grid{grid-template-columns:1fr 1fr}}
+  </style>
 </head>
-<body data-page="admin">
-  <div class="layout">
-    <aside class="sidebar left-sidebar" aria-label="Navigation">
-      <div class="left-brand">
-        <img src="PulseWhite.svg" alt="Pulse logo" class="left-brand-logo" />
-        <h2>Pulse</h2>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h2>Admin Paneli</h2>
+      <p class="muted">Bu sayfa yalnızca taş texture ve renk ayarlarını düzenler. Uygulamanın çalışan hali <b>index.html</b> üzerindedir.</p>
+      <div class="row"><a href="index.html" style="color:#9ec7ff">Index sayfasını aç</a></div>
+    </div>
+
+    <div class="panel">
+      <h3>Taş Texture (PNG) Yükleme</h3>
+      <div id="inputs" class="grid"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="saveBtn">Ayarları Kaydet</button>
+        <button id="clearBtn">Texture Sıfırla</button>
+        <span id="status" class="muted">Kaydedilmedi.</span>
       </div>
+    </div>
 
-      <nav class="menu" aria-label="Main menu">
-        <a href="feed.html">Anasayfa</a>
-        <a href="feed.html">Keşfet</a>
-        <a href="feed.html">Bildirimler</a>
-        <a href="feed.html">Mesajlar</a>
-        <a href="feed.html">Premium $</a>
-      </nav>
-    </aside>
-
-    <main class="app-shell">
-      <header class="top-bar">
-        <div class="brand">
-          <img src="PulseWhite.svg" alt="Pulse logo" class="brand-logo" />
-          <h1>Pulse</h1>
-        </div>
-        <div class="mode-switch" role="tablist" aria-label="Mode switch">
-          <a href="admin.html" class="tab-btn active">Composer / Admin</a>
-          <a href="feed.html" class="tab-btn">Feed</a>
-        </div>
-      </header>
-
-      <section class="panel" aria-label="Composer and admin mode">
-        <h2>Create content</h2>
-        <form id="composerForm" class="composer-form">
-          <label>
-            Post text
-            <textarea id="postText" rows="4" placeholder="Write a post or comment..." required></textarea>
-          </label>
-
-          <div class="form-row">
-            <label>
-              Post type
-              <select id="postType">
-                <option value="post">Post</option>
-                <option value="comment">Comment</option>
-              </select>
-            </label>
-
-            <label>
-              Parent post (for comments)
-              <select id="parentPostSelect">
-                <option value="">None</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="form-row">
-            <label>
-              Image / GIF / video thumbnail
-              <input id="mediaFile" type="file" accept="image/*,video/*" />
-            </label>
-
-            <label class="checkbox-line">
-              <input id="isSponsored" type="checkbox" />
-              Mark as Sponsored
-            </label>
-          </div>
-
-          <div class="form-row">
-            <label>
-              Author handle
-              <input id="authorHandle" type="text" value="@studio.pulse" />
-            </label>
-
-            <label>
-              Header line
-              <input id="authorSubMeta" type="text" value="music video draft" />
-            </label>
-          </div>
-
-          <button class="publish-btn" type="submit">Publish</button>
-        </form>
-
-        <section class="manager" aria-label="Content manager">
-          <h2>Manage posts & comments</h2>
-          <div id="manageList" class="manage-list"></div>
-        </section>
-
-        <section class="manager" aria-label="Suggestion manager">
-          <h2>Manage follow suggestions</h2>
-          <form id="suggestionForm" class="composer-form compact">
-            <div class="form-row">
-              <label>
-                Handle
-                <input id="suggestionHandle" type="text" placeholder="@new.creator" required />
-              </label>
-              <label>
-                Bio
-                <input id="suggestionBio" type="text" placeholder="short bio" required />
-              </label>
-            </div>
-            <button class="publish-btn" type="submit">Add suggestion</button>
-          </form>
-          <div id="suggestionManageList" class="manage-list"></div>
-        </section>
-      </section>
-    </main>
-
-    <aside class="sidebar right-sidebar" aria-label="Discover and follow">
-      <input id="searchInput" type="text" placeholder="Ara..." class="search-input" />
-      <section class="suggestions">
-        <h3>Takip önerileri</h3>
-        <div id="suggestionsList"></div>
-      </section>
-    </aside>
+    <div class="panel">
+      <h3>Tahta Renkleri</h3>
+      <div class="row">
+        <label>Açık Kare <input id="light" type="color" value="#f0d9b5" /></label>
+        <label>Koyu Kare <input id="dark" type="color" value="#b58863" /></label>
+      </div>
+    </div>
   </div>
 
-  <script src="script.js"></script>
+  <script>
+    (()=>{
+      const pieces=["K","Q","R","B","N","P","k","q","r","b","n","p"];
+      const inputs=document.getElementById('inputs');
+      const status=document.getElementById('status');
+      const light=document.getElementById('light');
+      const dark=document.getElementById('dark');
+      const textures=JSON.parse(localStorage.getItem('chess_textures')||'{}');
+      const colors=JSON.parse(localStorage.getItem('chess_board_colors')||'{"light":"#f0d9b5","dark":"#b58863"}');
+      light.value=colors.light||'#f0d9b5'; dark.value=colors.dark||'#b58863';
+
+      const files={};
+      pieces.forEach(p=>{
+        const label=document.createElement('label');
+        label.textContent=`${p} PNG`;
+        const input=document.createElement('input');
+        input.type='file'; input.accept='image/png';
+        input.onchange=()=>{files[p]=input.files?.[0]||null;};
+        label.appendChild(input);
+        inputs.appendChild(label);
+      });
+
+      async function toDataURL(file){return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(file);});}
+
+      document.getElementById('saveBtn').onclick=async()=>{
+        for(const p of pieces){if(files[p]) textures[p]=await toDataURL(files[p]);}
+        localStorage.setItem('chess_textures',JSON.stringify(textures));
+        localStorage.setItem('chess_board_colors',JSON.stringify({light:light.value,dark:dark.value}));
+        status.textContent='Kaydedildi. Index sayfasını yenileyin.'; status.className='ok';
+      };
+      document.getElementById('clearBtn').onclick=()=>{
+        localStorage.removeItem('chess_textures');
+        localStorage.setItem('chess_board_colors',JSON.stringify({light:'#f0d9b5',dark:'#b58863'}));
+        status.textContent='Texture sıfırlandı.'; status.className='ok';
+      };
+    })();
+  </script>
 </body>
 </html>

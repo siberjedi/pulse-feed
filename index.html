@@ -1,12 +1,635 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0; url=admin.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse</title>
+  <title>Satranç Analiz (Index)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chess.js@1.4.0/dist/chess.min.js"></script>
+  <style>
+    :root {
+      --bg:#1f2025; --panel:#2b2d33; --panel2:#353841; --text:#e8ebf1; --muted:#aeb6c4;
+      --accent:#5aa2ff; --danger:#ff5f6d; --ok:#44d17d;
+      --w:#f0d9b5; --b:#b58863; --legal:rgba(78,165,255,.42); --atk:rgba(255,76,92,.28); --safe:rgba(74,156,255,.22);
+    }
+    * { box-sizing:border-box }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:Inter,Arial,sans-serif; padding:16px }
+    .top { max-width:1320px; margin:0 auto 10px; display:flex; justify-content:space-between; align-items:center }
+    .top a { color:#9ec7ff }
+    .app { max-width:1320px; margin:auto; display:grid; grid-template-columns:minmax(340px,650px) minmax(300px,1fr); gap:16px }
+    .panel { background:var(--panel); border:1px solid #43464f; border-radius:14px; padding:12px }
+    .board { display:grid; grid-template-columns:repeat(8,1fr); aspect-ratio:1; border-radius:12px; overflow:hidden; border:1px solid #505564 }
+    .sq { position:relative; display:flex; justify-content:center; align-items:center; font-size:40px; user-select:none }
+    .l { background:var(--w); color:#111 } .d { background:var(--b); color:#111 }
+    .sq.legal::after { content:""; width:26%; aspect-ratio:1; border-radius:50%; background:var(--legal); position:absolute }
+    .sq.sel { outline:3px solid var(--accent); outline-offset:-3px }
+    .sq.atk { box-shadow:0 0 0 999px var(--atk) inset }
+    .sq.safe { box-shadow:0 0 0 999px var(--safe) inset }
+    .sq.threat { box-shadow:0 0 0 3px rgba(255,95,109,.7) inset }
+    .coord { position:absolute; font-size:10px; opacity:.78; font-weight:600 }
+    .file { right:3px; bottom:2px } .rank { left:3px; top:2px }
+    .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+    .controls { display:grid; gap:10px }
+    .label { font-size:13px; color:var(--muted) }
+    button,select { background:var(--panel2); color:var(--text); border:1px solid #575c68; border-radius:8px; padding:8px 10px }
+    button { cursor:pointer } .primary { background:var(--accent); color:#121723; font-weight:700; border-color:#7ab7ff }
+    .out,.warn { background:#23252c; border:1px solid #4b4f5b; border-radius:10px; padding:8px; font-family:ui-monospace,monospace; font-size:13px; min-height:38px }
+    .warn { font-family:inherit; background:rgba(255,95,109,.14); color:#ffdbe0 }
+    .tray { margin-top:10px; padding:10px; border:1px dashed #61697a; border-radius:10px; background:#252831; display:grid; grid-template-columns:repeat(6,1fr); gap:8px }
+    .piece { height:54px; border:1px solid #596072; border-radius:8px; background:#3a3f4b; display:flex; align-items:center; justify-content:center; cursor:grab }
+    .piece img { max-width:42px; max-height:42px; pointer-events:none } .piece span { font-size:34px }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px }
+    .status.ok { color:var(--ok) } .status.err { color:var(--danger) } .status { min-height:20px; color:var(--muted) }
+    @media(max-width:980px){ .app{ grid-template-columns:1fr } }
+  </style>
 </head>
 <body>
-  <p>Go to <a href="admin.html">admin.html</a>.</p>
+  <div class="top">
+    <h2>Satranç Analiz (Index)</h2>
+    <a href="admin.html">Admin Paneline Git</a>
+  </div>
+
+  <div class="app">
+    <section class="panel">
+      <div id="board" class="board"></div>
+      <div class="label" style="margin-top:8px">Editör Oyuncusu</div>
+      <div class="row">
+        <select id="editorSide"><option value="w">Beyaz</option><option value="b">Siyah</option></select>
+        <button id="flipBtn">Tahtayı Çevir</button>
+        <button id="clearBtn">Tahtayı Temizle</button>
+        <button id="startPosBtn">Başlangıç Dizilimi</button>
+      </div>
+      <div id="tray" class="tray"></div>
+    </section>
+
+    <section class="panel controls">
+      <h2 style="margin:2px 0">Analiz Paneli</h2>
+      <div class="grid2">
+        <div><div class="label">Hamle Sırası</div><select id="sideToMove"><option value="w">Beyaz</option><option value="b">Siyah</option></select></div>
+        <div><div class="label">Rok Hakları</div><div class="row"><label><input id="K" type="checkbox" checked> K</label><label><input id="Q" type="checkbox" checked> Q</label><label><input id="k" type="checkbox" checked> k</label><label><input id="q" type="checkbox" checked> q</label></div></div>
+      </div>
+      <div class="row"><button id="startBtn" class="primary">Oyuna Başla (Analiz)</button><button id="undoBtn" disabled>Geri Al</button><button id="resetBtn" disabled>Editöre Dön</button></div>
+      <div class="label">FEN</div><div id="fen" class="out"></div>
+      <div id="status" class="status">Motor başlatılıyor...</div>
+      <div class="grid2"><div class="out"><strong>Değerlendirme:</strong> <span id="eval">0.00</span></div><div class="out"><strong>En İyi Hamle:</strong> <span id="best">-</span></div></div>
+      <div class="out"><strong>Ana Varyant:</strong> <span id="pv">-</span></div>
+      <div class="warn" id="queenWarn">Vezir tehdidi yok.</div>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      const PIECE_UNICODE = { P:"♙",N:"♘",B:"♗",R:"♖",Q:"♕",K:"♔",p:"♟",n:"♞",b:"♝",r:"♜",q:"♛",k:"♚" };
+      const FILES = ["a","b","c","d","e","f","g","h"];
+
+      const state = {
+        mode: "editor",
+        editorMap: {},
+        editorSide: "w",
+        flipped: false,
+        selectedSquare: null,
+        legalTargets: [],
+        chess: null,
+        attacked: new Set(),
+        safeKing: new Set(),
+        threatened: new Set(),
+        queenWarning: "",
+        engine: null,
+        engineReady: false,
+        engineError: "",
+        debounce: null,
+        evalText: "0.00",
+        bestMove: "-",
+        pv: "-",
+        textures: JSON.parse(localStorage.getItem("chess_textures") || "{}")
+      };
+
+      const colors = JSON.parse(localStorage.getItem("chess_board_colors") || '{"light":"#f0d9b5","dark":"#b58863"}');
+      document.documentElement.style.setProperty("--w", colors.light || "#f0d9b5");
+      document.documentElement.style.setProperty("--b", colors.dark || "#b58863");
+
+      const dom = {
+        board: document.getElementById("board"), tray: document.getElementById("tray"), editorSide: document.getElementById("editorSide"),
+        flipBtn: document.getElementById("flipBtn"), clearBtn: document.getElementById("clearBtn"), startPosBtn: document.getElementById("startPosBtn"),
+        sideToMove: document.getElementById("sideToMove"), K: document.getElementById("K"), Q: document.getElementById("Q"), k: document.getElementById("k"), q: document.getElementById("q"),
+        startBtn: document.getElementById("startBtn"), undoBtn: document.getElementById("undoBtn"), resetBtn: document.getElementById("resetBtn"),
+        fen: document.getElementById("fen"), status: document.getElementById("status"), eval: document.getElementById("eval"), best: document.getElementById("best"), pv: document.getElementById("pv"), queenWarn: document.getElementById("queenWarn")
+      };
+
+      const setStatus = (msg, cls = "") => {
+        dom.status.textContent = msg;
+        dom.status.className = `status ${cls}`;
+      };
+
+      const withTurnFen = (fen, turn) => {
+        const p = fen.split(/\s+/);
+        p[1] = turn;
+        return p.join(" ");
+      };
+
+      function getPiece(square) {
+        if (state.mode === "analysis" && state.chess) {
+          const p = state.chess.get(square);
+          if (!p) return null;
+          return p.color === "w" ? p.type.toUpperCase() : p.type;
+        }
+        return state.editorMap[square] || null;
+      }
+
+      function drawPiece(target, piece) {
+        target.innerHTML = "";
+        const texture = state.textures[piece];
+        if (texture) {
+          const img = document.createElement("img");
+          img.src = texture;
+          target.appendChild(img);
+        } else {
+          const span = document.createElement("span");
+          span.textContent = PIECE_UNICODE[piece];
+          target.appendChild(span);
+        }
+      }
+
+      function buildFen() {
+        const rows = [];
+        for (let rank = 8; rank >= 1; rank--) {
+          let row = "";
+          let empty = 0;
+          for (const file of FILES) {
+            const piece = state.editorMap[`${file}${rank}`];
+            if (!piece) empty += 1;
+            else {
+              if (empty) { row += empty; empty = 0; }
+              row += piece;
+            }
+          }
+          if (empty) row += empty;
+          rows.push(row);
+        }
+        const castling = [dom.K.checked ? "K" : "", dom.Q.checked ? "Q" : "", dom.k.checked ? "k" : "", dom.q.checked ? "q" : ""].join("") || "-";
+        return `${rows.join("/")} ${dom.sideToMove.value} ${castling} - 0 1`;
+      }
+
+      function updateFen() {
+        dom.fen.textContent = state.mode === "analysis" && state.chess ? state.chess.fen() : buildFen();
+      }
+
+      function loadFenToEditor(fen) {
+        const p = fen.split(/\s+/);
+        state.editorMap = {};
+        p[0].split("/").forEach((row, rIdx) => {
+          let fileIdx = 0;
+          for (const ch of row) {
+            if (/\d/.test(ch)) fileIdx += Number(ch);
+            else {
+              state.editorMap[`${FILES[fileIdx]}${8 - rIdx}`] = ch;
+              fileIdx += 1;
+            }
+          }
+        });
+        dom.sideToMove.value = p[1] || "w";
+        const castling = p[2] || "-";
+        dom.K.checked = castling.includes("K"); dom.Q.checked = castling.includes("Q"); dom.k.checked = castling.includes("k"); dom.q.checked = castling.includes("q");
+        updateFen();
+        renderBoard();
+      }
+
+      function renderTray() {
+        dom.tray.innerHTML = "";
+        const pieces = state.editorSide === "w" ? ["K","Q","R","B","N","P"] : ["k","q","r","b","n","p"];
+        for (const piece of pieces) {
+          const el = document.createElement("div");
+          el.className = "piece";
+          el.draggable = true;
+          el.addEventListener("dragstart", ev => ev.dataTransfer.setData("piece", piece));
+          drawPiece(el, piece);
+          dom.tray.appendChild(el);
+        }
+      }
+
+      function boardOrder() {
+        return {
+          files: state.flipped ? [...FILES].reverse() : FILES,
+          ranks: state.flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1]
+        };
+      }
+
+      function renderBoard() {
+        dom.board.innerHTML = "";
+        const { files, ranks } = boardOrder();
+        for (const rank of ranks) {
+          for (const file of files) {
+            const square = `${file}${rank}`;
+            const el = document.createElement("div");
+            const isLight = ((FILES.indexOf(file) + rank) % 2 === 1);
+            el.className = `sq ${isLight ? "l" : "d"}`;
+
+            el.addEventListener("click", () => onSquareClick(square));
+            el.addEventListener("contextmenu", ev => {
+              ev.preventDefault();
+              if (state.mode !== "editor") return;
+              delete state.editorMap[square];
+              updateFen();
+              renderBoard();
+            });
+            el.addEventListener("dragover", ev => {
+              if (state.mode === "editor") ev.preventDefault();
+            });
+            el.addEventListener("drop", ev => {
+              if (state.mode !== "editor") return;
+              ev.preventDefault();
+              const piece = ev.dataTransfer.getData("piece");
+              if (!piece) return;
+              state.editorMap[square] = piece;
+              updateFen();
+              renderBoard();
+            });
+
+            const piece = getPiece(square);
+            if (piece) drawPiece(el, piece);
+
+            if (state.selectedSquare === square) el.classList.add("sel");
+            if (state.legalTargets.includes(square)) el.classList.add("legal");
+            if (state.attacked.has(square)) el.classList.add("atk");
+            if (state.safeKing.has(square)) el.classList.add("safe");
+            if (state.threatened.has(square)) el.classList.add("threat");
+
+            if (file === files[files.length - 1]) {
+              const rankTag = document.createElement("span");
+              rankTag.className = "coord rank";
+              rankTag.textContent = rank;
+              el.appendChild(rankTag);
+            }
+            if (rank === ranks[ranks.length - 1]) {
+              const fileTag = document.createElement("span");
+              fileTag.className = "coord file";
+              fileTag.textContent = file;
+              el.appendChild(fileTag);
+            }
+
+            dom.board.appendChild(el);
+          }
+        }
+      }
+
+      function validateKings() {
+        let w = 0, b = 0;
+        for (const piece of Object.values(state.editorMap)) {
+          if (piece === "K") w += 1;
+          if (piece === "k") b += 1;
+        }
+        if (w !== 1) return w === 0 ? "Analiz için beyaz şah gerekli." : "Analiz için yalnızca bir beyaz şah olmalı.";
+        if (b !== 1) return b === 0 ? "Analiz için siyah şah gerekli." : "Analiz için yalnızca bir siyah şah olmalı.";
+        return "";
+      }
+
+      function legalAnyTurn(square) {
+        const p = state.chess.get(square);
+        if (!p) return [];
+        const t = new Chess(withTurnFen(state.chess.fen(), p.color));
+        return t.moves({ square, verbose: true });
+      }
+
+      function moveAnyTurn(from, to) {
+        const p = state.chess.get(from);
+        if (!p) return null;
+        const backup = state.chess.fen();
+        if (state.chess.turn() !== p.color) state.chess.load(withTurnFen(backup, p.color));
+        const move = state.chess.move({ from, to, promotion: "q" });
+        if (!move) state.chess.load(backup);
+        return move;
+      }
+
+      function onSquareClick(square) {
+        if (state.mode === "editor") return;
+
+        if (!state.selectedSquare) {
+          if (!state.chess.get(square)) return;
+          state.selectedSquare = square;
+          state.legalTargets = legalAnyTurn(square).map(m => m.to);
+          renderBoard();
+          return;
+        }
+
+        if (square === state.selectedSquare) {
+          state.selectedSquare = null;
+          state.legalTargets = [];
+          renderBoard();
+          return;
+        }
+
+        const moved = moveAnyTurn(state.selectedSquare, square);
+        if (!moved) {
+          if (state.chess.get(square)) {
+            state.selectedSquare = square;
+            state.legalTargets = legalAnyTurn(square).map(m => m.to);
+          } else {
+            state.selectedSquare = null;
+            state.legalTargets = [];
+          }
+          renderBoard();
+          return;
+        }
+
+        state.selectedSquare = null;
+        state.legalTargets = [];
+        updateFen();
+        computeOverlays();
+        renderBoard();
+        queueEngine();
+      }
+
+      function attackedBy(square, color) {
+        const t = new Chess(withTurnFen(state.chess.fen(), color));
+        return t.moves({ verbose: true }).some(m => m.to === square);
+      }
+
+      function squaresBy(color) {
+        const list = [];
+        for (let rank = 1; rank <= 8; rank++) {
+          for (const file of FILES) {
+            const sq = `${file}${rank}`;
+            const p = state.chess.get(sq);
+            if (p && p.color === color) list.push(sq);
+          }
+        }
+        return list;
+      }
+
+      function computeOverlays() {
+        state.attacked = new Set();
+        state.safeKing = new Set();
+        state.threatened = new Set();
+        state.queenWarning = "";
+
+        if (!state.chess) return;
+
+        const turnColor = state.chess.turn();
+        const opp = turnColor === "w" ? "b" : "w";
+
+        for (let rank = 1; rank <= 8; rank++) {
+          for (const file of FILES) {
+            const sq = `${file}${rank}`;
+            if (attackedBy(sq, opp)) state.attacked.add(sq);
+          }
+        }
+
+        for (const sq of squaresBy(turnColor)) {
+          if (attackedBy(sq, opp)) state.threatened.add(sq);
+        }
+
+        const kingSq = squaresBy(turnColor).find(sq => state.chess.get(sq)?.type === "k");
+        if (kingSq) {
+          for (const move of legalAnyTurn(kingSq)) {
+            if (!attackedBy(move.to, opp)) state.safeKing.add(move.to);
+          }
+        }
+
+        const queenSq = squaresBy(turnColor).find(sq => state.chess.get(sq)?.type === "q");
+        if (queenSq && attackedBy(queenSq, opp)) {
+          state.queenWarning = `${turnColor === "w" ? "Beyaz" : "Siyah"} vezir tehdit altında!`;
+        }
+
+        dom.queenWarn.textContent = state.queenWarning || "Vezir tehdidi yok.";
+      }
+
+      function parseInfo(line) {
+        const cp = line.match(/\bscore\s+cp\s+(-?\d+)/);
+        const mate = line.match(/\bscore\s+mate\s+(-?\d+)/);
+        const pv = line.match(/\bpv\s+(.+)$/);
+
+        if (mate) state.evalText = `#${mate[1]}`;
+        else if (cp) state.evalText = (Number(cp[1]) / 100).toFixed(2);
+        if (pv) state.pv = pv[1].trim();
+
+        dom.eval.textContent = state.evalText;
+        dom.pv.textContent = state.pv;
+      }
+
+      function wireEngineOutput(engine) {
+        engine.onmessage = (eventOrLine) => {
+          const raw = typeof eventOrLine === "string" ? eventOrLine : String(eventOrLine?.data || "");
+          for (const line of raw.split(/\r?\n/)) {
+            if (!line) continue;
+            if (line.startsWith("info ")) parseInfo(line);
+            if (line.startsWith("bestmove")) {
+              state.bestMove = line.split(/\s+/)[1] || "-";
+              dom.best.textContent = state.bestMove;
+            }
+          }
+        };
+      }
+
+      async function waitEngineReady(engine, timeoutMs = 7000) {
+        return await new Promise(resolve => {
+          let done = false;
+          const timeout = setTimeout(() => {
+            if (done) return;
+            done = true;
+            resolve(false);
+          }, timeoutMs);
+
+          engine.onmessage = (eventOrLine) => {
+            const raw = typeof eventOrLine === "string" ? eventOrLine : String(eventOrLine?.data || "");
+            for (const line of raw.split(/\r?\n/)) {
+              if (!line) continue;
+              if (line === "readyok" && !done) {
+                done = true;
+                clearTimeout(timeout);
+                resolve(true);
+              }
+              if (line.startsWith("info ")) parseInfo(line);
+              if (line.startsWith("bestmove")) {
+                state.bestMove = line.split(/\s+/)[1] || "-";
+                dom.best.textContent = state.bestMove;
+              }
+            }
+          };
+
+          if (typeof engine.onerror !== "undefined") {
+            engine.onerror = () => {
+              if (done) return;
+              done = true;
+              clearTimeout(timeout);
+              resolve(false);
+            };
+          }
+
+          engine.postMessage("uci");
+          engine.postMessage("isready");
+        });
+      }
+
+      async function tryWorkerFactory(createWorker) {
+        try {
+          const worker = createWorker();
+          const ok = await waitEngineReady(worker);
+          if (!ok) {
+            if (typeof worker.terminate === "function") worker.terminate();
+            return null;
+          }
+          wireEngineOutput(worker);
+          return worker;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      async function initEngine() {
+        dom.startBtn.disabled = true;
+        setStatus("Motor başlatılıyor...");
+
+        const sources = [
+          { type: "local-worker", label: "Yerel stockfish.js", factory: () => new Worker("./stockfish.js") },
+          { type: "local-worker", label: "Yerel /stockfish.js", factory: () => new Worker("/stockfish.js") },
+          { type: "cdn-worker", label: "CDN jsdelivr 17.1.0", factory: () => new Worker(URL.createObjectURL(new Blob(["importScripts('https://cdn.jsdelivr.net/npm/stockfish@17.1.0/src/stockfish.js')"], { type: "application/javascript" }))) },
+          { type: "cdn-worker", label: "CDN unpkg 17.1.0", factory: () => new Worker(URL.createObjectURL(new Blob(["importScripts('https://unpkg.com/stockfish@17.1.0/src/stockfish.js')"], { type: "application/javascript" }))) },
+          { type: "cdn-worker", label: "CDN jsdelivr 16.0.0", factory: () => new Worker(URL.createObjectURL(new Blob(["importScripts('https://cdn.jsdelivr.net/npm/stockfish@16.0.0/src/stockfish.js')"], { type: "application/javascript" }))) }
+        ];
+
+        for (const source of sources) {
+          const engine = await tryWorkerFactory(source.factory);
+          if (engine) {
+            state.engine = engine;
+            state.engineReady = true;
+            setStatus(`Motor hazır (${source.label}). Oyuna başlayabilirsiniz.`, "ok");
+            dom.startBtn.disabled = false;
+            return;
+          }
+        }
+
+        // Son fallback: script olarak yükleyip STOCKFISH() fonksiyonu varsa kullan.
+        const scriptUrls = [
+          "./stockfish.js",
+          "/stockfish.js",
+          "https://cdn.jsdelivr.net/npm/stockfish@17.1.0/src/stockfish.js",
+          "https://unpkg.com/stockfish@17.1.0/src/stockfish.js"
+        ];
+
+        for (const url of scriptUrls) {
+          try {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement("script");
+              s.src = url;
+              s.onload = resolve;
+              s.onerror = reject;
+              document.head.appendChild(s);
+            });
+
+            if (typeof window.STOCKFISH !== "function") continue;
+
+            const engine = window.STOCKFISH();
+            const ok = await waitEngineReady(engine);
+            if (!ok) continue;
+            wireEngineOutput(engine);
+
+            state.engine = engine;
+            state.engineReady = true;
+            setStatus(`Motor hazır (${url}). Oyuna başlayabilirsiniz.`, "ok");
+            dom.startBtn.disabled = false;
+            return;
+          } catch (_) {}
+        }
+
+        state.engineError = "Motor yüklenemedi. İnternet erişimi yoksa proje köküne stockfish.js koyun.";
+        setStatus(state.engineError, "err");
+      }
+
+      function queueEngine() {
+        if (!state.engine || !state.engineReady || !state.chess) return;
+        clearTimeout(state.debounce);
+        state.debounce = setTimeout(() => {
+          state.engine.postMessage("stop");
+          state.engine.postMessage(`position fen ${state.chess.fen()}`);
+          state.engine.postMessage("go depth 18");
+        }, 500);
+      }
+
+      function bindEvents() {
+        dom.editorSide.addEventListener("change", () => {
+          state.editorSide = dom.editorSide.value;
+          state.flipped = state.editorSide === "b";
+          renderTray();
+          renderBoard();
+        });
+
+        dom.flipBtn.addEventListener("click", () => {
+          state.flipped = !state.flipped;
+          renderBoard();
+        });
+
+        dom.clearBtn.addEventListener("click", () => {
+          if (state.mode !== "editor") return;
+          state.editorMap = {};
+          updateFen();
+          renderBoard();
+        });
+
+        dom.startPosBtn.addEventListener("click", () => {
+          if (state.mode !== "editor") return;
+          loadFenToEditor("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        });
+
+        dom.sideToMove.addEventListener("change", updateFen);
+        [dom.K, dom.Q, dom.k, dom.q].forEach(c => c.addEventListener("change", updateFen));
+
+        dom.startBtn.addEventListener("click", () => {
+          if (!state.engineReady) return setStatus(state.engineError || "Motor hazır değil.", "err");
+          const err = validateKings();
+          if (err) return setStatus(err, "err");
+
+          const chess = new Chess();
+          if (!chess.load(buildFen())) return setStatus("Geçersiz FEN.", "err");
+
+          state.mode = "analysis";
+          state.chess = chess;
+          state.selectedSquare = null;
+          state.legalTargets = [];
+          dom.undoBtn.disabled = false;
+          dom.resetBtn.disabled = false;
+
+          setStatus("Analiz modu aktif.", "ok");
+          updateFen();
+          computeOverlays();
+          renderBoard();
+          queueEngine();
+        });
+
+        dom.undoBtn.addEventListener("click", () => {
+          if (!state.chess || !state.chess.undo()) return setStatus("Geri alınacak hamle yok.", "err");
+          state.selectedSquare = null;
+          state.legalTargets = [];
+          updateFen();
+          computeOverlays();
+          renderBoard();
+          queueEngine();
+        });
+
+        dom.resetBtn.addEventListener("click", () => {
+          if (!state.chess) return;
+          const fen = state.chess.fen();
+          state.mode = "editor";
+          state.chess = null;
+          state.selectedSquare = null;
+          state.legalTargets = [];
+          state.attacked = new Set();
+          state.safeKing = new Set();
+          state.threatened = new Set();
+          dom.undoBtn.disabled = true;
+          dom.resetBtn.disabled = true;
+          loadFenToEditor(fen);
+          setStatus("Editör moduna dönüldü.", "ok");
+        });
+      }
+
+      function init() {
+        renderTray();
+        loadFenToEditor("8/8/8/8/8/8/8/8 w - - 0 1");
+        bindEvents();
+        initEngine();
+      }
+
+      init();
+    })();
+  </script>
 </body>
 </html>
