@@ -9,6 +9,7 @@
   const RECORDING_SETTINGS_KEY = 'pulseRecordingSettings.v1';
   const page = document.body.dataset.page || 'admin';
   const isTimelinePage = page === 'feed' || page === 'mobile';
+  const isMobileTimeline = page === 'mobile';
 
   const NICKNAMES = ['DerinAkis','BetonZihin','MaskesizGercek','GriDuvar','AltKatSakin','SogukGercek','DipDalga','KaranlikYorum','Gozlemci34','NabizTutan','IsimsizKayit','SistemArizasi','ArkaSokakVeri','KuleAltindan','YedinciKat','UyariSeviyesi','BuzGibiHakikat','SesKaydi01','CatiKatisi','DuvarArasi','user384920','yorumcu_xx','gercekler123','vatandas_01','milliSes78','haberTakipcisi','objektif_bakis','dogruYorumcu','netKonusan','turkEvladidir','sistemSavunucusu','rastgele_987','anon_kayit','yorumMakinesi','feedKontrol','veri_akisi','trendAvcisi','feedTetik','BodrumdanSes','TesisatciDegil','CatiUstunde','DelikIcinden','BetonAltindan','KilerSakin','DuvarKemirgen','SogukZemin','KatMaliki','KiraciDegil','TapuBizde','IslakDuvar','RutubetliGercek','SarsintiOncesi','ArizaKaydi','EnkazAltindan','PasaSakini','YonetimKatinda','MarkaOrtak','GuvenliYarin','BuyumeUzmani','EkonomiTakip','ResmiAciklama','PRMasasi','KrizYonetimi','KamuBilgi','IletisimOfisi','GuvenilirKaynak','KurumsalSes','DestekHatti','StratejiMasasi','DegerYaratir','IleriVizyon','YerAltiKaydi','SertAkis','DissArsivi','MaskeyiDusur','CizgiDisi','SakinOlmam','HukumGeldi','DefterAcik','KayitDisi','GozDiken','NabizYuksek','TansiyonArtis','DuzenCoktu','SinyalYok','VeriPatladi'];
 
@@ -309,7 +310,8 @@
       createdAt: Date.now(),
     });
 
-    persistPostAndSuggestions();
+    const persisted = persistPostAndSuggestions();
+    if (!persisted) alert('Post eklendi ama tarayıcı depolama limiti dolu olabilir; kalıcı kaydedilemedi.');
     buildTimeline();
     refresh();
     el.composerForm.reset();
@@ -651,7 +653,7 @@
 
     clearTimelineCatchup();
     timelineCatchupActive = true;
-    if (page === 'mobile') syncMobilePlaybackLayout(true);
+    if (isMobileTimeline) syncMobilePlaybackLayout(true);
     let virtualTs = startTs;
     const stepSec = 0.1;
     timelineCatchupTimer = window.setInterval(() => {
@@ -701,8 +703,10 @@
     await recordPreviewVideo.play();
 
     recordCanvas = document.createElement('canvas');
-    recordCanvas.width = 2160;
-    recordCanvas.height = 3840;
+    const outputWidth = isMobileTimeline ? 2160 : 3840;
+    const outputHeight = isMobileTimeline ? 3840 : 2160;
+    recordCanvas.width = outputWidth;
+    recordCanvas.height = outputHeight;
     const ctx = recordCanvas.getContext('2d');
     if (!ctx) return null;
 
@@ -733,8 +737,8 @@
           sh = Math.min(srcH - sy, Math.max(1, targetRect.height * syScale));
         }
 
-        ctx.clearRect(0, 0, 2160, 3840);
-        ctx.drawImage(recordPreviewVideo, sx, sy, sw, sh, 0, 0, 2160, 3840);
+        ctx.clearRect(0, 0, outputWidth, outputHeight);
+        ctx.drawImage(recordPreviewVideo, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight);
         if (outputTrack?.requestFrame) outputTrack.requestFrame();
       }
       recordRaf = requestAnimationFrame(drawFrame);
@@ -751,8 +755,8 @@
       recordStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           frameRate: clamp(Number(state.recordingFps) || 60, 12, 120),
-          width: { ideal: 2160 },
-          height: { ideal: 3840 },
+          width: { ideal: isMobileTimeline ? 2160 : 3840 },
+          height: { ideal: isMobileTimeline ? 3840 : 2160 },
           displaySurface: 'browser',
         },
         audio: false,
@@ -761,7 +765,7 @@
         surfaceSwitching: 'exclude',
         monitorTypeSurfaces: 'exclude',
       });
-      recordOutputStream = await buildCentered4kStream();
+      recordOutputStream = isMobileTimeline ? await buildCentered4kStream() : null;
       const targetBps = Math.round(clamp(Number(state.recordingBitrateMbps) || 24, 4, 80) * 1000000);
       const recOptions = { videoBitsPerSecond: targetBps };
       if (window.MediaRecorder?.isTypeSupported?.('video/webm;codecs=vp9')) recOptions.mimeType = 'video/webm;codecs=vp9';
@@ -1236,7 +1240,7 @@
     bind();
     initVisualizer();
     initAudio();
-    if (page === 'mobile') {
+    if (isMobileTimeline) {
       state.autoScroll = true;
       syncMobilePlaybackLayout(false);
     }
