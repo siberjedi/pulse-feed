@@ -387,6 +387,7 @@
         alert('Tarayıcı oynatmayı engelledi.');
       }
     } else {
+      clearTimelineCatchup();
       audioPlayer.pause();
       autoRecordStop();
       syncMobilePlaybackLayout(false);
@@ -595,9 +596,8 @@
     }
   }
 
-  function processTimeline() {
-    if (!isTimelinePage || audioPlayer.paused) return;
-    const t = audioPlayer.currentTime;
+  function processTimelineAt(t) {
+    if (!isTimelinePage) return;
 
     if (t + 0.3 < state.lastTrackTime) {
       rebuildFeedFromTimelineTime(t);
@@ -613,6 +613,52 @@
     }
 
     state.lastTrackTime = t;
+  }
+
+  function processTimeline() {
+    if (!isTimelinePage || audioPlayer.paused) return;
+    processTimelineAt(audioPlayer.currentTime);
+  }
+
+  let timelineCatchupTimer = 0;
+  let timelineCatchupActive = false;
+
+  function clearTimelineCatchup() {
+    if (timelineCatchupTimer) clearInterval(timelineCatchupTimer);
+    timelineCatchupTimer = 0;
+    timelineCatchupActive = false;
+  }
+
+  function getMaxTimelineTimestamp() {
+    return state.timelineEvents[state.timelineEvents.length - 1]?.ts || 0;
+  }
+
+  function finalizeTimelineRun() {
+    clearTimelineCatchup();
+    stopRecording({ flushDelayMs: 2000 });
+    syncMobilePlaybackLayout(false);
+    hideOverlay();
+  }
+
+  function catchupTimelineAfterAudioEnds() {
+    const startTs = Number(audioPlayer.currentTime) || Number(state.lastTrackTime) || 0;
+    const targetTs = Math.max(startTs, getMaxTimelineTimestamp());
+    if (targetTs <= startTs + 0.05) {
+      processTimelineAt(targetTs);
+      finalizeTimelineRun();
+      return;
+    }
+
+    clearTimelineCatchup();
+    timelineCatchupActive = true;
+    if (page === 'mobile') syncMobilePlaybackLayout(true);
+    let virtualTs = startTs;
+    const stepSec = 0.1;
+    timelineCatchupTimer = window.setInterval(() => {
+      virtualTs = Math.min(targetTs, virtualTs + stepSec);
+      processTimelineAt(virtualTs);
+      if (virtualTs >= targetTs - 0.001) finalizeTimelineRun();
+    }, 100);
   }
 
   let recorder = null;
@@ -1173,12 +1219,11 @@
 
     audioPlayer.addEventListener('ended', () => {
       if (el.musicToggleBtn) el.musicToggleBtn.textContent = '▶';
-      stopRecording({ flushDelayMs: 2000 });
-      syncMobilePlaybackLayout(false);
-      hideOverlay();
+      catchupTimelineAfterAudioEnds();
     });
 
     audioPlayer.addEventListener('pause', () => {
+      if (timelineCatchupActive) return;
       syncMobilePlaybackLayout(false);
     });
   }
