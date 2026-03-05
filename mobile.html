@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pulse Mobile Feed</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="mobile">
+  <main class="mobile-stage" aria-label="Vertical 4K mobile preview">
+    <section id="mobileCaptureRegion" class="mobile-frame">
+      <section class="mobile-player" aria-label="Müzik çalar">
+        <div class="music-track-meta">
+          <p id="musicTrackTitle" class="music-track-title">Song</p>
+          <p id="musicTrackSinger" class="music-track-singer">Singer Name</p>
+        </div>
+        <select id="musicTrackSelect" class="music-track-select" aria-label="Şarkı seç"></select>
+        <div class="music-time-row"><span id="musicCurrentTime">0:00</span><span id="musicDuration">0:00</span></div>
+        <input id="musicProgress" class="music-progress" type="range" min="0" max="100" value="0" />
+        <div class="music-player-controls">
+          <button id="musicPrevBtn" type="button" class="player-icon-btn">⏮</button>
+          <button id="musicToggleBtn" type="button" class="player-main-btn">▶</button>
+          <button id="musicNextBtn" type="button" class="player-icon-btn">⏭</button>
+        </div>
+      </section>
+      <section id="feed" class="feed mobile-feed" aria-label="Mobile feed timeline"></section>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

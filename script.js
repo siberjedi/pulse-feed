@@ -2,23 +2,30 @@
   const POSTS_KEY = 'pulseFeedPosts.v8';
   const SUGGESTIONS_KEY = 'pulseSuggestions.v2';
   const MUSIC_DB_NAME = 'pulseFeedDb';
-  const MUSIC_DB_VERSION = 1;
+  const MUSIC_DB_VERSION = 2;
   const MUSIC_STORE = 'music';
+  const APP_STORE = 'appData';
   const MUSIC_KEY = 'tracks';
   const LEGACY_MUSIC_KEY = 'pulseMusicTracks.v1';
+  const RECORDING_SETTINGS_KEY = 'pulseRecordingSettings.v1';
+  const APP_DATA_KEY = 'postsAndSuggestions';
   const page = document.body.dataset.page || 'admin';
+  const isTimelinePage = page === 'feed' || page === 'mobile';
+  const isMobileTimeline = page === 'mobile';
 
   const NICKNAMES = ['DerinAkis','BetonZihin','MaskesizGercek','GriDuvar','AltKatSakin','SogukGercek','DipDalga','KaranlikYorum','Gozlemci34','NabizTutan','IsimsizKayit','SistemArizasi','ArkaSokakVeri','KuleAltindan','YedinciKat','UyariSeviyesi','BuzGibiHakikat','SesKaydi01','CatiKatisi','DuvarArasi','user384920','yorumcu_xx','gercekler123','vatandas_01','milliSes78','haberTakipcisi','objektif_bakis','dogruYorumcu','netKonusan','turkEvladidir','sistemSavunucusu','rastgele_987','anon_kayit','yorumMakinesi','feedKontrol','veri_akisi','trendAvcisi','feedTetik','BodrumdanSes','TesisatciDegil','CatiUstunde','DelikIcinden','BetonAltindan','KilerSakin','DuvarKemirgen','SogukZemin','KatMaliki','KiraciDegil','TapuBizde','IslakDuvar','RutubetliGercek','SarsintiOncesi','ArizaKaydi','EnkazAltindan','PasaSakini','YonetimKatinda','MarkaOrtak','GuvenliYarin','BuyumeUzmani','EkonomiTakip','ResmiAciklama','PRMasasi','KrizYonetimi','KamuBilgi','IletisimOfisi','GuvenilirKaynak','KurumsalSes','DestekHatti','StratejiMasasi','DegerYaratir','IleriVizyon','YerAltiKaydi','SertAkis','DissArsivi','MaskeyiDusur','CizgiDisi','SakinOlmam','HukumGeldi','DefterAcik','KayitDisi','GozDiken','NabizYuksek','TansiyonArtis','DuzenCoktu','SinyalYok','VeriPatladi'];
 
   const state = {
     posts: [], suggestions: [], tracks: [], currentTrackId: '',
-    autoScroll: false, speedPxPerSecond: 34, lastTime: performance.now(),
+    autoScroll: page === 'mobile', speedPxPerSecond: 34, lastTime: performance.now(),
     timelineEvents: [], timelineIndex: 0, lastTrackTime: 0,
     visiblePostIds: [], visibleComments: {}, typingComments: {}, activeCommentFlows: {},
     nickPool: [],
+    recordingFps: 60,
+    recordingBitrateMbps: 24,
   };
 
-  const ids = ['composerForm','postText','postType','parentPostSelect','mediaFile','carouselFiles','carouselTimestamps','postTimestamp','mediaAspect','authorAvatarFile','authorHandle','authorRandom','isSponsored','isBoosted','feed','adminFeed','manageList','suggestionForm','suggestionHandle','suggestionBio','suggestionAvatarFile','suggestionManageList','suggestionsList','searchInput','autoScrollEnabled','scrollSpeed','pauseAtPosts','musicForm','musicTitle','musicArtist','musicFile','musicManageList','musicTrackSelect','musicToggleBtn','musicPrevBtn','musicNextBtn','musicTrackTitle','musicTrackSinger','musicProgress','musicCurrentTime','musicDuration','musicVisualizer','timelineOverlay','recordToggleBtn','editAvatarInput','editMediaInput'];
+  const ids = ['composerForm','postText','postType','parentPostSelect','mediaFile','carouselFiles','carouselTimestamps','postTimestamp','mediaAspect','authorAvatarFile','authorHandle','authorRandom','isSponsored','isBoosted','feed','adminFeed','manageList','suggestionForm','suggestionHandle','suggestionBio','suggestionAvatarFile','suggestionManageList','suggestionsList','searchInput','autoScrollEnabled','scrollSpeed','pauseAtPosts','musicForm','musicTitle','musicArtist','musicFile','musicManageList','musicTrackSelect','musicToggleBtn','musicPrevBtn','musicNextBtn','musicTrackTitle','musicTrackSinger','musicProgress','musicCurrentTime','musicDuration','musicVisualizer','timelineOverlay','recordToggleBtn','recordingSettingsForm','recordingFps','recordingBitrateMbps','editAvatarInput','editMediaInput'];
   const el = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
 
   const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -48,9 +55,52 @@
   function commentsFor(postId) { return state.posts.filter((x) => x.type === 'comment' && x.parentId === postId).sort((a, b) => a.createdAt - b.createdAt); }
 
   function persistPostAndSuggestions() {
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
+    const payload = { posts: state.posts, suggestions: state.suggestions };
+
+    void (async () => {
+      try {
+        const db = await openMusicDb();
+        if (!db) throw new Error('no db');
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(APP_STORE, 'readwrite');
+          tx.objectStore(APP_STORE).put(payload, APP_DATA_KEY);
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+        return;
+      } catch (err) {
+        console.warn('IndexedDB persist warning:', err);
+      }
+
+      try {
+        localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
+        localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
+      } catch (err) {
+        console.warn('localStorage persist warning:', err);
+      }
+    })();
+
+    return true;
   }
+
+
+  const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
+  function persistRecordingSettings() {
+    const payload = {
+      fps: clamp(Number(state.recordingFps) || 60, 12, 120),
+      bitrateMbps: clamp(Number(state.recordingBitrateMbps) || 24, 4, 80),
+    };
+    state.recordingFps = payload.fps;
+    state.recordingBitrateMbps = payload.bitrateMbps;
+    localStorage.setItem(RECORDING_SETTINGS_KEY, JSON.stringify(payload));
+  }
+
+  function renderRecordingSettings() {
+    if (el.recordingFps) el.recordingFps.value = String(state.recordingFps);
+    if (el.recordingBitrateMbps) el.recordingBitrateMbps.value = String(state.recordingBitrateMbps);
+  }
+
 
   function openMusicDb() {
     if (!window.indexedDB) return Promise.resolve(null);
@@ -60,6 +110,7 @@
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(MUSIC_STORE)) db.createObjectStore(MUSIC_STORE);
+        if (!db.objectStoreNames.contains(APP_STORE)) db.createObjectStore(APP_STORE);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error || new Error('DB açılamadı'));
@@ -105,12 +156,42 @@
     }
   }
 
+
+  async function loadPostsAndSuggestions() {
+    try {
+      const db = await openMusicDb();
+      if (!db) throw new Error('no db');
+      const payload = await new Promise((resolve, reject) => {
+        const tx = db.transaction(APP_STORE, 'readonly');
+        const req = tx.objectStore(APP_STORE).get(APP_DATA_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+      if (payload && Array.isArray(payload.posts)) {
+        state.posts = payload.posts;
+        state.suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : seedSuggestions();
+        return;
+      }
+      throw new Error('empty app payload');
+    } catch {
+      state.posts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]') || [];
+      state.suggestions = JSON.parse(localStorage.getItem(SUGGESTIONS_KEY) || 'null') || seedSuggestions();
+    }
+  }
+
   async function loadData() {
-    state.posts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]') || [];
-    state.suggestions = JSON.parse(localStorage.getItem(SUGGESTIONS_KEY) || 'null') || seedSuggestions();
+    await loadPostsAndSuggestions();
     state.tracks = await loadTracks();
     state.currentTrackId = state.tracks[0]?.id || '';
     state.nickPool = [...NICKNAMES];
+    try {
+      const cfg = JSON.parse(localStorage.getItem(RECORDING_SETTINGS_KEY) || '{}') || {};
+      state.recordingFps = clamp(Number(cfg.fps) || 60, 12, 120);
+      state.recordingBitrateMbps = clamp(Number(cfg.bitrateMbps) || 24, 4, 80);
+    } catch {
+      state.recordingFps = 60;
+      state.recordingBitrateMbps = 24;
+    }
   }
 
   function renderParentOptions() {
@@ -125,7 +206,7 @@
   }
 
   function getFeedPosts() {
-    if (page !== 'feed') return allPosts();
+    if (!isTimelinePage) return allPosts();
     return state.visiblePostIds
       .map((id) => state.posts.find((x) => x.id === id && x.type === 'post'))
       .filter(Boolean);
@@ -135,7 +216,7 @@
     if (!target) return;
     const postList = getFeedPosts();
     if (!postList.length) {
-      target.innerHTML = page === 'feed'
+      target.innerHTML = isTimelinePage
         ? '<div class="empty-feed">Akış müzik zaman damgalarını bekliyor...</div>'
         : '<div class="empty-feed">No posts yet.</div>';
       return;
@@ -147,13 +228,13 @@
       const avatar = p.authorAvatar || avatarFor(p.author);
       const allComments = commentsFor(p.id);
       const revealedIds = state.visibleComments[p.id] || [];
-      const shownComments = page === 'feed' ? allComments.filter((c) => revealedIds.includes(c.id)) : allComments;
-      const typing = page === 'feed' ? state.typingComments[p.id] : null;
+      const shownComments = isTimelinePage ? allComments.filter((c) => revealedIds.includes(c.id)) : allComments;
+      const typing = isTimelinePage ? state.typingComments[p.id] : null;
 
       return `<article class="post-card" data-post-id="${p.id}">
         <header class="post-head">
           <img class="avatar ${isAdminPreview ? 'editable-avatar' : ''}" src="${avatar}" alt="${esc(p.author)} avatar" ${isAdminPreview ? `data-edit-avatar="${p.id}"` : ''} />
-          <p class="meta-row"><strong>${esc(p.author)}</strong>${p.vip ? ` <span class="vip-badge"><img src="vip-crown.svg" alt="VIP" class="vip-crown" /></span>` : ""} <span class="timestamp">· ${timeAgo(p.createdAt)}</span></p>
+          <p class="meta-row"><strong>${esc(p.author)}</strong>${p.vip ? ` <span class="vip-badge"><img src="vip-crown.svg" alt="VIP" class="vip-crown" /></span>` : ""}${p.sponsored ? ' <span class="sponsored-tag">Sponsored</span>' : ''} <span class="timestamp">· ${timeAgo(p.createdAt)}</span></p>
         </header>
         <p class="post-text ${isAdminPreview ? 'editable-text' : ''}" ${isAdminPreview ? `data-edit-text="${p.id}"` : ''}>${formatText(p.text)}</p>
         <div ${isAdminPreview ? `data-edit-media="${p.id}" class="editable-media-wrap"` : ''}>${mediaNode({ src: p.media, mediaType: p.mediaType })}</div>
@@ -214,6 +295,7 @@
     renderSuggestionManager();
     renderTrackSelect();
     renderTrackManager();
+    renderRecordingSettings();
   }
 
   function pickRandomNick() {
@@ -324,6 +406,13 @@
     visualizer.data = new Uint8Array(visualizer.analyser.frequencyBinCount);
   }
 
+
+  function syncMobilePlaybackLayout(isPlaying) {
+    if (page !== 'mobile') return;
+    document.body.classList.toggle('mobile-playing', Boolean(isPlaying));
+    if (isPlaying && el.feed) el.feed.scrollTop = 0;
+  }
+
   async function togglePlayback() {
     if (!audioPlayer.src) applyTrack(el.musicTrackSelect?.value || state.currentTrackId);
     if (!audioPlayer.src) return;
@@ -332,17 +421,21 @@
       try {
         await ensureVisualizerNodes();
         if (visualizer.ctx?.state === 'suspended') await visualizer.ctx.resume();
-        if (page === 'feed') {
+        if (isTimelinePage) {
           const recordingReady = await startRecording(true);
           if (!recordingReady) return;
         }
         await audioPlayer.play();
+        syncMobilePlaybackLayout(true);
       } catch {
         alert('Tarayıcı oynatmayı engelledi.');
       }
     } else {
+      clearTimelineCatchup();
       audioPlayer.pause();
       autoRecordStop();
+      syncMobilePlaybackLayout(false);
+      el.feed?.style.setProperty('--mobile-comment-reserve', '140px');
     }
 
     if (el.musicToggleBtn) el.musicToggleBtn.textContent = audioPlayer.paused ? '▶' : '❚❚';
@@ -383,34 +476,57 @@
     state.timelineIndex = 0;
   }
 
-  function centerPost(postId) {
-    if (page !== 'feed' || !el.feed) return;
-    const node = el.feed.querySelector(`[data-post-id="${postId}"]`);
-    if (!node) return;
+  function centerNodeInFeed(node) {
+    if (!isTimelinePage || !el.feed || !node) return;
+    if (page === 'mobile') {
+      const feedRect = el.feed.getBoundingClientRect();
+      const nodeRect = node.getBoundingClientRect();
+      const current = el.feed.scrollTop;
+      const delta = (nodeRect.top - feedRect.top) - ((feedRect.height / 2) - (nodeRect.height / 2));
+      el.feed.scrollTo({ top: Math.max(0, current + delta), behavior: 'auto' });
+      return;
+    }
     const rect = node.getBoundingClientRect();
     const delta = rect.top - ((window.innerHeight / 2) - (rect.height / 2));
-    window.scrollBy({ top: delta, behavior: 'auto' });
+    window.scrollBy({ top: delta, behavior: 'smooth' });
   }
 
-  function alignPostTop(postId) {
-    if (page !== 'feed' || !el.feed) return;
-    const node = el.feed.querySelector(`[data-post-id="${postId}"]`);
-    if (!node) return;
-    const rect = node.getBoundingClientRect();
-    window.scrollBy({ top: rect.top, behavior: 'auto' });
+  function centerPost(postId) {
+    if (!isTimelinePage || !el.feed) return;
+    centerNodeInFeed(el.feed.querySelector(`[data-post-id="${postId}"]`));
   }
 
-  function alignCommentWithBottomBuffer(postId, commentId) {
-    if (page !== 'feed' || !el.feed || !commentId) return;
+  function centerComment(postId, commentId) {
+    if (!isTimelinePage || !el.feed || !commentId) return;
     const postNode = el.feed.querySelector(`[data-post-id="${postId}"]`);
-    if (!postNode) return;
-    const commentNode = postNode.querySelector(`[data-comment-id="${commentId}"]`);
-    if (!commentNode) return;
-    const rect = commentNode.getBoundingClientRect();
-    const reserve = Math.max(rect.height * 5, 220);
-    const targetTop = Math.max(30, window.innerHeight - reserve - rect.height);
-    const delta = rect.top - targetTop;
-    window.scrollBy({ top: delta, behavior: 'auto' });
+    const commentNode = postNode?.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!commentNode) {
+      centerNodeInFeed(postNode);
+      return;
+    }
+
+    if (page === 'mobile') {
+      const feedRect = el.feed.getBoundingClientRect();
+      const current = el.feed.scrollTop;
+      const commentNodes = Array.from(postNode?.querySelectorAll('.comment') || []);
+      const sampleNodes = commentNodes.slice(-3);
+      const sampleAvgHeight = sampleNodes.length
+        ? (sampleNodes.reduce((sum, n) => sum + n.getBoundingClientRect().height, 0) / sampleNodes.length)
+        : commentNode.getBoundingClientRect().height;
+      const reserveBelow = Math.max(sampleAvgHeight * 2, 120);
+      el.feed.style.setProperty('--mobile-comment-reserve', `${Math.round(reserveBelow)}px`);
+      const safeBottom = feedRect.bottom - reserveBelow;
+
+      const commentsWrap = postNode?.querySelector('.comments');
+      const tailNode = commentsWrap?.lastElementChild || commentNode;
+      const tailRect = tailNode.getBoundingClientRect();
+      const targetScroll = current + (tailRect.bottom - safeBottom);
+      const maxScroll = Math.max(0, el.feed.scrollHeight - el.feed.clientHeight);
+      el.feed.scrollTo({ top: Math.max(0, Math.min(maxScroll, targetScroll)), behavior: 'auto' });
+      return;
+    }
+
+    centerNodeInFeed(commentNode);
   }
 
   let overlayTimer = 0;
@@ -429,7 +545,7 @@
   }
 
   function showOverlay(html, { sticky = false, duration = 1300 } = {}) {
-    if (page !== 'feed' || !el.timelineOverlay) return;
+    if (!isTimelinePage || !el.timelineOverlay) return;
     clearTimeout(overlayTimer);
     clearInterval(boostTimer);
     el.timelineOverlay.classList.add('active');
@@ -483,7 +599,7 @@
     if (ev.kind === 'post') {
       if (!state.visiblePostIds.includes(ev.post.id)) state.visiblePostIds.push(ev.post.id);
       refresh();
-      alignPostTop(ev.post.id);
+      centerPost(ev.post.id);
 
       if (ev.post.boosted) {
         if (!state.activeBoostIds) state.activeBoostIds = [];
@@ -513,20 +629,19 @@
       }
 
       refresh();
-      alignCommentWithBottomBuffer(ev.post.id, ev.comment.id);
+      centerComment(ev.post.id, ev.comment.id);
       return;
     }
 
     if (ev.kind === 'carousel') {
       if (!state.visiblePostIds.includes(ev.post.id)) state.visiblePostIds.push(ev.post.id);
       refresh();
-      alignPostTop(ev.post.id);
+      centerPost(ev.post.id);
     }
   }
 
-  function processTimeline() {
-    if (page !== 'feed' || audioPlayer.paused) return;
-    const t = audioPlayer.currentTime;
+  function processTimelineAt(t) {
+    if (!isTimelinePage) return;
 
     if (t + 0.3 < state.lastTrackTime) {
       rebuildFeedFromTimelineTime(t);
@@ -544,19 +659,146 @@
     state.lastTrackTime = t;
   }
 
+  function processTimeline() {
+    if (!isTimelinePage || audioPlayer.paused) return;
+    processTimelineAt(audioPlayer.currentTime);
+  }
+
+  let timelineCatchupTimer = 0;
+  let timelineCatchupActive = false;
+
+  function clearTimelineCatchup() {
+    if (timelineCatchupTimer) clearInterval(timelineCatchupTimer);
+    timelineCatchupTimer = 0;
+    timelineCatchupActive = false;
+  }
+
+  function getMaxTimelineTimestamp() {
+    return state.timelineEvents[state.timelineEvents.length - 1]?.ts || 0;
+  }
+
+  function finalizeTimelineRun() {
+    clearTimelineCatchup();
+    stopRecording({ flushDelayMs: 2000 });
+    syncMobilePlaybackLayout(false);
+    hideOverlay();
+  }
+
+  function catchupTimelineAfterAudioEnds() {
+    const startTs = Number(audioPlayer.currentTime) || Number(state.lastTrackTime) || 0;
+    const targetTs = Math.max(startTs, getMaxTimelineTimestamp());
+    if (targetTs <= startTs + 0.05) {
+      processTimelineAt(targetTs);
+      finalizeTimelineRun();
+      return;
+    }
+
+    clearTimelineCatchup();
+    timelineCatchupActive = true;
+    if (isMobileTimeline) syncMobilePlaybackLayout(true);
+    let virtualTs = startTs;
+    const stepSec = 0.1;
+    timelineCatchupTimer = window.setInterval(() => {
+      virtualTs = Math.min(targetTs, virtualTs + stepSec);
+      processTimelineAt(virtualTs);
+      if (virtualTs >= targetTs - 0.001) finalizeTimelineRun();
+    }, 100);
+  }
+
   let recorder = null;
   let recordStream = null;
+  let recordOutputStream = null;
+  let recordPreviewVideo = null;
+  let recordCanvas = null;
+  let recordRaf = 0;
+  let recordLastFrameAt = 0;
+  let recordClickStopArmed = false;
+  let recordStopTapAllowedAt = 0;
+  let recordStopTimer = 0;
   let recordedChunks = [];
 
+  function stopRecordPipeline() {
+    if (recordStopTimer) clearTimeout(recordStopTimer);
+    recordStopTimer = 0;
+    if (recordRaf) cancelAnimationFrame(recordRaf);
+    recordRaf = 0;
+    recordLastFrameAt = 0;
+    if (recordPreviewVideo) {
+      recordPreviewVideo.pause();
+      recordPreviewVideo.srcObject = null;
+      recordPreviewVideo.remove();
+      recordPreviewVideo = null;
+    }
+    recordOutputStream?.getTracks().forEach((tr) => tr.stop());
+    recordOutputStream = null;
+    recordCanvas = null;
+  }
+
+  async function buildCentered4kStream() {
+    const source = recordStream;
+    if (!source) return null;
+
+    recordPreviewVideo = document.createElement('video');
+    recordPreviewVideo.muted = true;
+    recordPreviewVideo.playsInline = true;
+    recordPreviewVideo.srcObject = source;
+    await recordPreviewVideo.play();
+
+    recordCanvas = document.createElement('canvas');
+    const outputWidth = isMobileTimeline ? 2160 : 3840;
+    const outputHeight = isMobileTimeline ? 3840 : 2160;
+    recordCanvas.width = outputWidth;
+    recordCanvas.height = outputHeight;
+    const ctx = recordCanvas.getContext('2d');
+    if (!ctx) return null;
+
+    const outputStream = recordCanvas.captureStream(0);
+    const outputTrack = outputStream.getVideoTracks()[0] || null;
+    const frameIntervalMs = 1000 / clamp(Number(state.recordingFps) || 60, 12, 120);
+
+    const drawFrame = (now) => {
+      if (!recordLastFrameAt || (now - recordLastFrameAt) >= frameIntervalMs) {
+        recordLastFrameAt = now;
+        const srcW = recordPreviewVideo.videoWidth || 1;
+        const srcH = recordPreviewVideo.videoHeight || 1;
+        const targetRect = (page === 'mobile' ? document.getElementById('mobileCaptureRegion') : el.feed)?.getBoundingClientRect();
+        const viewportW = window.innerWidth || 1;
+        const viewportH = window.innerHeight || 1;
+        const sxScale = srcW / viewportW;
+        const syScale = srcH / viewportH;
+
+        let sx = 0;
+        let sy = 0;
+        let sw = srcW;
+        let sh = srcH;
+
+        if (targetRect && targetRect.width > 1 && targetRect.height > 1) {
+          sx = Math.max(0, targetRect.left * sxScale);
+          sy = Math.max(0, targetRect.top * syScale);
+          sw = Math.min(srcW - sx, Math.max(1, targetRect.width * sxScale));
+          sh = Math.min(srcH - sy, Math.max(1, targetRect.height * syScale));
+        }
+
+        ctx.clearRect(0, 0, outputWidth, outputHeight);
+        ctx.drawImage(recordPreviewVideo, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight);
+        if (outputTrack?.requestFrame) outputTrack.requestFrame();
+      }
+      recordRaf = requestAnimationFrame(drawFrame);
+    };
+
+    drawFrame(performance.now());
+    return outputStream;
+  }
+
   async function startRecording(silentFail = false) {
-    if (page !== 'feed') return false;
+    if (!isTimelinePage) return false;
     if (recorder) return true;
     try {
       recordStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          frameRate: 60,
-          width: { ideal: 3840 },
-          height: { ideal: 2160 },
+          frameRate: clamp(Number(state.recordingFps) || 60, 12, 120),
+          width: { ideal: isMobileTimeline ? 2160 : 3840 },
+          height: { ideal: isMobileTimeline ? 3840 : 2160 },
           displaySurface: 'browser',
         },
         audio: false,
@@ -565,7 +807,13 @@
         surfaceSwitching: 'exclude',
         monitorTypeSurfaces: 'exclude',
       });
-      recorder = new MediaRecorder(recordStream, { mimeType: 'video/webm;codecs=vp9' });
+      recordOutputStream = isMobileTimeline ? await buildCentered4kStream() : null;
+      const targetBps = Math.round(clamp(Number(state.recordingBitrateMbps) || 24, 4, 80) * 1000000);
+      const recOptions = { videoBitsPerSecond: targetBps };
+      if (window.MediaRecorder?.isTypeSupported?.('video/webm;codecs=vp9')) recOptions.mimeType = 'video/webm;codecs=vp9';
+      else if (window.MediaRecorder?.isTypeSupported?.('video/webm;codecs=vp8')) recOptions.mimeType = 'video/webm;codecs=vp8';
+      else recOptions.mimeType = 'video/webm';
+      recorder = new MediaRecorder(recordOutputStream || recordStream, recOptions);
       recordedChunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
       recorder.onstop = () => {
@@ -574,22 +822,43 @@
         a.href = URL.createObjectURL(blob);
         a.download = `pulse-feed-${Date.now()}.webm`;
         a.click();
+        stopRecordPipeline();
         recordStream?.getTracks().forEach((tr) => tr.stop());
         recordStream = null;
         recorder = null;
+        recordClickStopArmed = false;
         if (el.recordToggleBtn) el.recordToggleBtn.textContent = '● Record';
       };
       recorder.start(250);
+      recordClickStopArmed = false;
+      recordStopTapAllowedAt = performance.now() + 2500;
+      window.setTimeout(() => { recordClickStopArmed = true; }, 450);
       if (el.recordToggleBtn) el.recordToggleBtn.textContent = '■ Stop';
       return true;
     } catch {
+      stopRecordPipeline();
+      recordStream?.getTracks().forEach((tr) => tr.stop());
+      recordStream = null;
       if (!silentFail) alert('Kayıt başlatılamadı. Tarayıcı güvenlik nedeniyle seçim ister.');
       return false;
     }
   }
 
-  function stopRecording() {
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  function stopRecording({ flushDelayMs = 0 } = {}) {
+    recordClickStopArmed = false;
+    if (!recorder || recorder.state === 'inactive') return;
+    if (recordStopTimer) clearTimeout(recordStopTimer);
+
+    const finalize = () => {
+      if (!recorder || recorder.state === 'inactive') return;
+      try { recorder.requestData(); } catch {}
+      window.setTimeout(() => {
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+      }, 120);
+    };
+
+    if (flushDelayMs > 0) recordStopTimer = window.setTimeout(finalize, flushDelayMs);
+    else finalize();
   }
 
   const autoRecordStart = async () => { await startRecording(true); };
@@ -865,6 +1134,21 @@
       });
     }
 
+    if (page === 'mobile') {
+      const stopOnTap = (e) => {
+        if (!recordClickStopArmed || !recorder) return;
+        if (performance.now() < recordStopTapAllowedAt) return;
+        const region = document.getElementById('mobileCaptureRegion');
+        if (!region || !region.contains(e.target)) return;
+        stopRecording();
+      };
+      document.addEventListener('click', stopOnTap);
+      document.addEventListener('keydown', (e) => {
+        if (!recorder || e.repeat) return;
+        if (e.code === 'KeyK' || e.code === 'Escape') stopRecording();
+      });
+    }
+
     document.addEventListener('click', (e) => {
       const closeBtn = e.target.closest('[data-close-overlay]');
       if (!closeBtn) return;
@@ -872,14 +1156,25 @@
       state.popupPostId = null;
     });
 
+    if (el.recordingSettingsForm) {
+      const applyRecordingSettings = () => {
+        state.recordingFps = clamp(Number(el.recordingFps?.value) || 60, 12, 120);
+        state.recordingBitrateMbps = clamp(Number(el.recordingBitrateMbps?.value) || 24, 4, 80);
+        persistRecordingSettings();
+        renderRecordingSettings();
+      };
+      el.recordingSettingsForm.addEventListener('input', applyRecordingSettings);
+      el.recordingSettingsForm.addEventListener('change', applyRecordingSettings);
+    }
+
     if (el.searchInput) el.searchInput.addEventListener('input', renderSuggestions);
     if (el.autoScrollEnabled) el.autoScrollEnabled.addEventListener('change', () => { state.autoScroll = el.autoScrollEnabled.checked; });
     if (el.scrollSpeed) el.scrollSpeed.addEventListener('input', () => { state.speedPxPerSecond = Number(el.scrollSpeed.value); });
   }
 
   function tick(now) {
-    if (page === 'feed') {
-      if (state.autoScroll) {
+    if (isTimelinePage) {
+      if (state.autoScroll && page !== 'mobile') {
         const delta = (now - state.lastTime) / 1000;
         window.scrollBy(0, state.speedPxPerSecond * delta);
       }
@@ -970,20 +1265,27 @@
 
     audioPlayer.addEventListener('ended', () => {
       if (el.musicToggleBtn) el.musicToggleBtn.textContent = '▶';
-      autoRecordStop();
-      hideOverlay();
+      catchupTimelineAfterAudioEnds();
     });
 
-    audioPlayer.addEventListener('pause', autoRecordStop);
+    audioPlayer.addEventListener('pause', () => {
+      if (timelineCatchupActive) return;
+      syncMobilePlaybackLayout(false);
+    });
   }
 
   async function init() {
     await loadData();
+    persistRecordingSettings();
     buildTimeline();
     refresh();
     bind();
     initVisualizer();
     initAudio();
+    if (isMobileTimeline) {
+      state.autoScroll = true;
+      syncMobilePlaybackLayout(false);
+    }
     if (state.currentTrackId) applyTrack(state.currentTrackId);
     requestAnimationFrame(tick);
   }
