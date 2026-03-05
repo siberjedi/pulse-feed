@@ -129,3 +129,5 @@ body[data-page="mobile"] .post-card{max-width:100%}
 
 body[data-page="mobile"].mobile-playing .mobile-player{display:none}
 body[data-page="mobile"].mobile-playing .mobile-frame{grid-template-rows:1fr}
+
+.sponsored-tag{margin-left:8px;padding:2px 8px;border-radius:999px;border:1px solid #8b6f16;background:#3a2f08;color:#ffe8a3;font-size:.68rem;font-weight:700}

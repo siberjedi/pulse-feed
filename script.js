@@ -52,8 +52,14 @@
   function commentsFor(postId) { return state.posts.filter((x) => x.type === 'comment' && x.parentId === postId).sort((a, b) => a.createdAt - b.createdAt); }
 
   function persistPostAndSuggestions() {
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
+    try {
+      localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
+      localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
+      return true;
+    } catch (err) {
+      console.warn('Persist warning:', err);
+      return false;
+    }
   }
 
 
@@ -184,7 +190,7 @@
       return `<article class="post-card" data-post-id="${p.id}">
         <header class="post-head">
           <img class="avatar ${isAdminPreview ? 'editable-avatar' : ''}" src="${avatar}" alt="${esc(p.author)} avatar" ${isAdminPreview ? `data-edit-avatar="${p.id}"` : ''} />
-          <p class="meta-row"><strong>${esc(p.author)}</strong>${p.vip ? ` <span class="vip-badge"><img src="vip-crown.svg" alt="VIP" class="vip-crown" /></span>` : ""} <span class="timestamp">· ${timeAgo(p.createdAt)}</span></p>
+          <p class="meta-row"><strong>${esc(p.author)}</strong>${p.vip ? ` <span class="vip-badge"><img src="vip-crown.svg" alt="VIP" class="vip-crown" /></span>` : ""}${p.sponsored ? ' <span class="sponsored-tag">Sponsored</span>' : ''} <span class="timestamp">· ${timeAgo(p.createdAt)}</span></p>
         </header>
         <p class="post-text ${isAdminPreview ? 'editable-text' : ''}" ${isAdminPreview ? `data-edit-text="${p.id}"` : ''}>${formatText(p.text)}</p>
         <div ${isAdminPreview ? `data-edit-media="${p.id}" class="editable-media-wrap"` : ''}>${mediaNode({ src: p.media, mediaType: p.mediaType })}</div>
@@ -1167,7 +1173,7 @@
 
     audioPlayer.addEventListener('ended', () => {
       if (el.musicToggleBtn) el.musicToggleBtn.textContent = '▶';
-      stopRecording({ flushDelayMs: 1200 });
+      stopRecording({ flushDelayMs: 2000 });
       syncMobilePlaybackLayout(false);
       hideOverlay();
     });
