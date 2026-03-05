@@ -2,11 +2,13 @@
   const POSTS_KEY = 'pulseFeedPosts.v8';
   const SUGGESTIONS_KEY = 'pulseSuggestions.v2';
   const MUSIC_DB_NAME = 'pulseFeedDb';
-  const MUSIC_DB_VERSION = 1;
+  const MUSIC_DB_VERSION = 2;
   const MUSIC_STORE = 'music';
+  const APP_STORE = 'appData';
   const MUSIC_KEY = 'tracks';
   const LEGACY_MUSIC_KEY = 'pulseMusicTracks.v1';
   const RECORDING_SETTINGS_KEY = 'pulseRecordingSettings.v1';
+  const APP_DATA_KEY = 'postsAndSuggestions';
   const page = document.body.dataset.page || 'admin';
   const isTimelinePage = page === 'feed' || page === 'mobile';
   const isMobileTimeline = page === 'mobile';
@@ -53,14 +55,28 @@
   function commentsFor(postId) { return state.posts.filter((x) => x.type === 'comment' && x.parentId === postId).sort((a, b) => a.createdAt - b.createdAt); }
 
   function persistPostAndSuggestions() {
+    const payload = { posts: state.posts, suggestions: state.suggestions };
+
     try {
       localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
       localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
-      return true;
     } catch (err) {
-      console.warn('Persist warning:', err);
-      return false;
+      console.warn('localStorage persist warning:', err);
     }
+
+    void openMusicDb().then((db) => {
+      if (!db) return;
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(APP_STORE, 'readwrite');
+        tx.objectStore(APP_STORE).put(payload, APP_DATA_KEY);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    }).catch((err) => {
+      console.warn('IndexedDB persist warning:', err);
+    });
+
+    return true;
   }
 
 
@@ -90,6 +106,7 @@
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(MUSIC_STORE)) db.createObjectStore(MUSIC_STORE);
+        if (!db.objectStoreNames.contains(APP_STORE)) db.createObjectStore(APP_STORE);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error || new Error('DB açılamadı'));
@@ -135,9 +152,31 @@
     }
   }
 
+
+  async function loadPostsAndSuggestions() {
+    try {
+      const db = await openMusicDb();
+      if (!db) throw new Error('no db');
+      const payload = await new Promise((resolve, reject) => {
+        const tx = db.transaction(APP_STORE, 'readonly');
+        const req = tx.objectStore(APP_STORE).get(APP_DATA_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+      if (payload && Array.isArray(payload.posts)) {
+        state.posts = payload.posts;
+        state.suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : seedSuggestions();
+        return;
+      }
+      throw new Error('empty app payload');
+    } catch {
+      state.posts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]') || [];
+      state.suggestions = JSON.parse(localStorage.getItem(SUGGESTIONS_KEY) || 'null') || seedSuggestions();
+    }
+  }
+
   async function loadData() {
-    state.posts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]') || [];
-    state.suggestions = JSON.parse(localStorage.getItem(SUGGESTIONS_KEY) || 'null') || seedSuggestions();
+    await loadPostsAndSuggestions();
     state.tracks = await loadTracks();
     state.currentTrackId = state.tracks[0]?.id || '';
     state.nickPool = [...NICKNAMES];
@@ -310,8 +349,7 @@
       createdAt: Date.now(),
     });
 
-    const persisted = persistPostAndSuggestions();
-    if (!persisted) alert('Post eklendi ama tarayıcı depolama limiti dolu olabilir; kalıcı kaydedilemedi.');
+    persistPostAndSuggestions();
     buildTimeline();
     refresh();
     el.composerForm.reset();
