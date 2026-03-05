@@ -57,24 +57,28 @@
   function persistPostAndSuggestions() {
     const payload = { posts: state.posts, suggestions: state.suggestions };
 
-    try {
-      localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
-      localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
-    } catch (err) {
-      console.warn('localStorage persist warning:', err);
-    }
+    void (async () => {
+      try {
+        const db = await openMusicDb();
+        if (!db) throw new Error('no db');
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(APP_STORE, 'readwrite');
+          tx.objectStore(APP_STORE).put(payload, APP_DATA_KEY);
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+        return;
+      } catch (err) {
+        console.warn('IndexedDB persist warning:', err);
+      }
 
-    void openMusicDb().then((db) => {
-      if (!db) return;
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(APP_STORE, 'readwrite');
-        tx.objectStore(APP_STORE).put(payload, APP_DATA_KEY);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-    }).catch((err) => {
-      console.warn('IndexedDB persist warning:', err);
-    });
+      try {
+        localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
+        localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
+      } catch (err) {
+        console.warn('localStorage persist warning:', err);
+      }
+    })();
 
     return true;
   }
