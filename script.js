@@ -1,6 +1,6 @@
 (() => {
-  const SIM_KEY = 'plinko.simulations.v3';
-  const RUN_KEY = 'plinko.runs.v3';
+  const SIM_KEY = 'plinko.simulations.v4';
+  const RUN_KEY = 'plinko.runs.v4';
   const page = document.body.dataset.page;
 
   const CANVAS_WIDTH = 1000;
@@ -21,7 +21,6 @@
     simulationCanvas: document.getElementById('simulationCanvas'),
     activeSimName: document.getElementById('activeSimName'),
     timerDisplay: document.getElementById('timerDisplay'),
-    arrivedDisplay: document.getElementById('arrivedDisplay'),
     playButton: document.getElementById('playButton'),
     countdownOverlay: document.getElementById('countdownOverlay'),
     statsButtonsView: document.getElementById('statsButtonsView'),
@@ -67,6 +66,30 @@
     };
   }
 
+  function getDirectionStyle(sim, dir) {
+    if (dir > 0) {
+      return {
+        color: sim.downBallColor || sim.ballColor || '#21d7e6',
+        sign: sim.downBallSign || sim.ballSign || '+',
+      };
+    }
+    return {
+      color: sim.upBallColor || sim.ballColor || '#ffd166',
+      sign: sim.upBallSign || sim.ballSign || '-',
+    };
+  }
+
+  function computeSignTotals(sim) {
+    let plus = 0;
+    let minus = 0;
+    for (const plan of sim.ballPlans || []) {
+      const style = getDirectionStyle(sim, plan.dir);
+      if (style.sign === '+') plus += 1;
+      if (style.sign === '-') minus += 1;
+    }
+    return { plus, minus };
+  }
+
   function createSimulationFromForm(form) {
     const fd = new FormData(form);
     const getNum = (id) => Number(fd.get(id));
@@ -80,9 +103,11 @@
       obstacleCount: getNum('obstacleCount'),
       obstacleColor: String(fd.get('obstacleColor') || '#0b0b0b'),
       ballSize: getNum('ballSize'),
-      ballColor: String(fd.get('ballColor') || '#21d7e6'),
-      ballSign: String(fd.get('ballSign') || '+'),
+      downBallColor: String(fd.get('downBallColor') || '#21d7e6'),
+      downBallSign: String(fd.get('downBallSign') || '+'),
       downBallCount: getNum('downBallCount'),
+      upBallColor: String(fd.get('upBallColor') || '#ffd166'),
+      upBallSign: String(fd.get('upBallSign') || '-'),
       upBallCount: getNum('upBallCount'),
       dropDuration: getNum('dropDuration'),
       timerColor: String(fd.get('timerColor') || '#ffffff'),
@@ -99,12 +124,10 @@
       alert('Simülasyon adı zorunlu.');
       return null;
     }
-
     if (sim.downBallCount + sim.upBallCount < 1) {
       alert('En az 1 top olmalı.');
       return null;
     }
-
     return sim;
   }
 
@@ -130,7 +153,6 @@
         tries += 1;
         const x = leftWallX + margin + rand() * Math.max(10, rightWallX - leftWallX - margin * 2);
         const y = topBand + margin + rand() * Math.max(10, height - topBand - bottomBand - margin * 2);
-
         let tooClose = false;
         for (const prev of obstacles) {
           if (Math.hypot(prev.x - x, prev.y - y) < sim.obstacleSize * 2 + 18) {
@@ -138,7 +160,6 @@
             break;
           }
         }
-
         if (!tooClose) {
           obstacles.push({ x: Number(x.toFixed(2)), y: Number(y.toFixed(2)), r: sim.obstacleSize });
           ok = true;
@@ -192,20 +213,14 @@
       });
     }
 
-    return {
-      layout: { width, height, leftWallX, rightWallX, obstacles },
-      ballPlans,
-    };
+    return { layout: { width, height, leftWallX, rightWallX, obstacles }, ballPlans };
   }
 
   function computeBallState(sim, layout, plan, elapsedMs) {
-    if (elapsedMs < plan.spawnMs) {
-      return { active: false, done: false, x: 0, y: 0 };
-    }
+    if (elapsedMs < plan.spawnMs) return { active: false, done: false, x: 0, y: 0, dir: plan.dir };
 
     const radius = sim.ballSize;
     const localT = Math.min(1, (elapsedMs - plan.spawnMs) / Math.max(plan.travelMs, 120));
-
     const startY = plan.dir > 0 ? radius + 14 : layout.height - radius - 14;
     const endY = plan.dir > 0 ? layout.height - radius : radius;
     const y = startY + (endY - startY) * localT;
@@ -229,12 +244,7 @@
     const maxX = layout.rightWallX - radius;
     x = Math.max(minX, Math.min(maxX, x));
 
-    return {
-      active: localT < 1,
-      done: localT >= 1,
-      x,
-      y,
-    };
+    return { active: localT < 1, done: localT >= 1, x, y, dir: plan.dir };
   }
 
   function runPrecompute(sim) {
@@ -243,28 +253,21 @@
     sim.ballPlans = built.ballPlans;
 
     const finalElapsed = sim.dropDuration * 1000;
-    const doneCount = sim.ballPlans.reduce((acc, plan) => {
-      const info = computeBallState(sim, sim.layout, plan, finalElapsed);
-      return acc + (info.done ? 1 : 0);
-    }, 0);
-
-    const totalCount = sim.ballPlans.length;
-    if (doneCount !== totalCount) {
+    const doneCount = sim.ballPlans.reduce((acc, plan) => acc + (computeBallState(sim, sim.layout, plan, finalElapsed).done ? 1 : 0), 0);
+    if (doneCount !== sim.ballPlans.length) {
       sim.compileStatus = 'Hata';
       sim.compileError = 'Ön hesaplama tamamlanamadı.';
       return;
     }
 
-    const plusCount = sim.ballSign === '+' ? totalCount : 0;
-    const minusCount = sim.ballSign === '-' ? totalCount : 0;
-    const elapsedSec = Number(sim.dropDuration.toFixed(3));
-
+    const signTotals = computeSignTotals(sim);
+    const elapsedSec = Math.max(1, Math.round(sim.dropDuration));
     sim.precomputedRun = {
-      plusCount,
-      minusCount,
-      totalCount,
+      plusCount: signTotals.plus,
+      minusCount: signTotals.minus,
+      totalCount: sim.ballPlans.length,
       elapsedSec,
-      current: Number((totalCount / Math.max(elapsedSec, 0.001)).toFixed(3)),
+      current: Math.floor(sim.ballPlans.length / elapsedSec),
     };
     sim.compileStatus = 'Tamamlandı';
     sim.compileError = '';
@@ -277,18 +280,16 @@
       return;
     }
 
-    el.simulationList.innerHTML = state.simulations
-      .map((sim) => `
-        <article class="item-row">
-          <div>
-            <p><strong>${escapeHtml(sim.name)}</strong></p>
-            <small>Toplam top: ${sim.downBallCount + sim.upBallCount} • Engel: ${sim.obstacleCount} • Süre: ${sim.dropDuration}s</small>
-            <small>Durum: <span class="status ${sim.compileStatus === 'Tamamlandı' ? 'ok' : ''}">${sim.compileStatus}</span>${sim.compileError ? ` (${escapeHtml(sim.compileError)})` : ''}</small>
-          </div>
-          <button class="btn" data-delete-id="${sim.id}">Sil</button>
-        </article>
-      `)
-      .join('');
+    el.simulationList.innerHTML = state.simulations.map((sim) => `
+      <article class="item-row">
+        <div>
+          <p><strong>${escapeHtml(sim.name)}</strong></p>
+          <small>Toplam top: ${sim.downBallCount + sim.upBallCount} • Engel: ${sim.obstacleCount} • Süre: ${sim.dropDuration}s</small>
+          <small>Durum: <span class="status ${sim.compileStatus === 'Tamamlandı' ? 'ok' : ''}">${sim.compileStatus}</span>${sim.compileError ? ` (${escapeHtml(sim.compileError)})` : ''}</small>
+        </div>
+        <button class="btn" data-delete-id="${sim.id}">Sil</button>
+      </article>
+    `).join('');
   }
 
   function renderFeedButtons() {
@@ -297,10 +298,7 @@
       el.feedButtonList.innerHTML = '<p>Kayıtlı simülasyon yok. Önce Admin sayfasından oluşturun.</p>';
       return;
     }
-
-    el.feedButtonList.innerHTML = state.simulations
-      .map((sim) => `<button class="btn launch-btn" data-launch-id="${sim.id}" ${sim.compileStatus !== 'Tamamlandı' ? 'disabled' : ''}>${escapeHtml(sim.name)} ${sim.compileStatus !== 'Tamamlandı' ? '• Devam Ediyor' : ''}</button>`)
-      .join('');
+    el.feedButtonList.innerHTML = state.simulations.map((sim) => `<button class="btn launch-btn" data-launch-id="${sim.id}" ${sim.compileStatus !== 'Tamamlandı' ? 'disabled' : ''}>${escapeHtml(sim.name)} ${sim.compileStatus !== 'Tamamlandı' ? '• Devam Ediyor' : ''}</button>`).join('');
   }
 
   function renderStatsButtons() {
@@ -309,19 +307,14 @@
       el.statsButtonList.innerHTML = '<p>Kayıtlı simülasyon yok.</p>';
       return;
     }
-
-    el.statsButtonList.innerHTML = state.simulations
-      .map((sim) => `<button class="btn launch-btn" data-stats-id="${sim.id}">${escapeHtml(sim.name)}</button>`)
-      .join('');
+    el.statsButtonList.innerHTML = state.simulations.map((sim) => `<button class="btn launch-btn" data-stats-id="${sim.id}">${escapeHtml(sim.name)}</button>`).join('');
   }
 
   function setupEngine(sim) {
-    const canvas = el.simulationCanvas;
-    const ctx = canvas.getContext('2d');
     return {
       sim,
       layout: sim.layout,
-      ctx,
+      ctx: el.simulationCanvas.getContext('2d'),
       running: false,
       startedAt: 0,
       elapsed: 0,
@@ -349,7 +342,8 @@
 
     for (const b of engine.runtimeBalls) {
       if (!b.active) continue;
-      ctx.fillStyle = sim.ballColor;
+      const style = getDirectionStyle(sim, b.dir);
+      ctx.fillStyle = style.color;
       ctx.beginPath();
       ctx.arc(b.x, b.y, sim.ballSize, 0, Math.PI * 2);
       ctx.fill();
@@ -358,7 +352,7 @@
       ctx.font = `${sim.ballSize + 4}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(sim.ballSign, b.x, b.y + 1);
+      ctx.fillText(style.sign, b.x, b.y + 1);
     }
   }
 
@@ -371,17 +365,12 @@
     const engine = state.engine;
     if (!engine || !engine.running) return;
 
-    const now = performance.now();
-    engine.elapsed = now - engine.startedAt;
-
+    engine.elapsed = performance.now() - engine.startedAt;
     updateRuntimeBalls(engine);
     draw(engine);
 
     const elapsedSec = engine.elapsed / 1000;
     el.timerDisplay.textContent = `${elapsedSec.toFixed(1)}s`;
-    if (el.arrivedDisplay) {
-      el.arrivedDisplay.textContent = `Geçen top: ${engine.doneCount}/${engine.sim.ballPlans.length}`;
-    }
 
     const reachedDuration = elapsedSec >= engine.sim.dropDuration;
     const allDone = engine.doneCount === engine.sim.ballPlans.length;
@@ -390,24 +379,21 @@
       finishSimulation(engine);
       return;
     }
-
     requestAnimationFrame(runSimulationLoop);
   }
 
   function finishSimulation(engine) {
+    const signTotals = computeSignTotals(engine.sim);
     const total = engine.sim.ballPlans.length;
-    const plus = engine.sim.ballSign === '+' ? total : 0;
-    const minus = engine.sim.ballSign === '-' ? total : 0;
-    const elapsed = Number((engine.elapsed / 1000).toFixed(3));
-
+    const enteredDuration = Math.max(1, Math.round(engine.sim.dropDuration));
     state.runs[engine.sim.id] = {
       simulationId: engine.sim.id,
       simulationName: engine.sim.name,
-      plusCount: plus,
-      minusCount: minus,
+      plusCount: signTotals.plus,
+      minusCount: signTotals.minus,
       totalCount: total,
-      elapsedSec: elapsed,
-      current: Number(((plus + minus) / Math.max(elapsed, 0.001)).toFixed(3)),
+      elapsedSec: enteredDuration,
+      current: Math.floor(total / enteredDuration),
       finishedAt: Date.now(),
     };
     save();
@@ -446,10 +432,9 @@
     el.timerDisplay.style.color = sim.timerColor;
     el.timerDisplay.style.fontSize = `${sim.timerSize}px`;
     el.timerDisplay.textContent = '0.0s';
-    if (el.arrivedDisplay) el.arrivedDisplay.textContent = `Geçen top: 0/${sim.ballPlans.length}`;
 
     state.engine = setupEngine(sim);
-    state.engine.runtimeBalls = sim.ballPlans.map(() => ({ active: false, done: false, x: 0, y: 0 }));
+    state.engine.runtimeBalls = sim.ballPlans.map((plan) => ({ active: false, done: false, x: 0, y: 0, dir: plan.dir }));
     draw(state.engine);
 
     el.playButton.disabled = false;
@@ -511,6 +496,7 @@
       document.getElementById('wallGap').value = '760';
       document.getElementById('obstacleCount').value = '18';
       document.getElementById('downBallCount').value = '8';
+      document.getElementById('upBallCount').value = '0';
       document.getElementById('dropDuration').value = '14';
     });
 
@@ -551,8 +537,8 @@
   function assignFormNames() {
     const ids = [
       'simName', 'backgroundColor', 'wallGap', 'wallColor', 'obstacleSize', 'obstacleCount',
-      'obstacleColor', 'ballSize', 'ballColor', 'ballSign', 'downBallCount', 'upBallCount',
-      'dropDuration', 'timerColor', 'timerSize',
+      'obstacleColor', 'ballSize', 'downBallColor', 'downBallSign', 'downBallCount',
+      'upBallColor', 'upBallSign', 'upBallCount', 'dropDuration', 'timerColor', 'timerSize',
     ];
     for (const id of ids) {
       const input = document.getElementById(id);

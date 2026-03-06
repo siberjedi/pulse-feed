@@ -233,14 +233,3 @@ input[type="color"] {
   color: #73e89d;
 }
 
-
-.sim-meta {
-  display: grid;
-  justify-items: end;
-  gap: 4px;
-}
-
-.arrived {
-  font-size: 0.95rem;
-  color: var(--muted);
-}

@@ -44,20 +44,29 @@
         <label>Top boyutu (yarıçap px)
           <input id="ballSize" type="number" min="6" max="30" value="18" />
         </label>
-        <label>Top rengi
-          <input id="ballColor" type="color" value="#21d7e6" />
+        <label>Aşağı giden top sayısı
+          <input id="downBallCount" type="number" min="0" max="200" value="8" />
         </label>
-        <label>Top işareti
-          <select id="ballSign">
+        <label>Aşağı giden top rengi
+          <input id="downBallColor" type="color" value="#21d7e6" />
+        </label>
+        <label>Aşağı giden top işareti
+          <select id="downBallSign">
             <option value="+">+</option>
             <option value="-">-</option>
           </select>
         </label>
-        <label>Aşağı giden top sayısı
-          <input id="downBallCount" type="number" min="0" max="200" value="8" />
-        </label>
         <label>Yukarı giden top sayısı
           <input id="upBallCount" type="number" min="0" max="200" value="0" />
+        </label>
+        <label>Yukarı giden top rengi
+          <input id="upBallColor" type="color" value="#ffd166" />
+        </label>
+        <label>Yukarı giden top işareti
+          <select id="upBallSign">
+            <option value="+">+</option>
+            <option value="-">-</option>
+          </select>
         </label>
         <label>Düşme / geçiş süresi (sn)
           <input id="dropDuration" type="number" min="3" max="180" value="14" />
