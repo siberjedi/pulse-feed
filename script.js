@@ -1,45 +1,47 @@
 (() => {
-  const POSTS_KEY = 'pulseFeedPosts.v4';
-  const SUGGESTIONS_KEY = 'pulseSuggestions.v1';
-
-  const page = document.body.dataset.page || 'admin';
+  const SIM_KEY = 'plinko.simulations.v1';
+  const RUN_KEY = 'plinko.runs.v1';
+  const page = document.body.dataset.page;
 
   const state = {
-    posts: [],
-    suggestions: [],
-    autoScroll: true,
-    pauseAtPosts: true,
-    speedPxPerSecond: 34,
-    isPaused: false,
-    pauseUntil: 0,
-    lastTime: performance.now(),
-    loopResetPending: false,
+    simulations: load(SIM_KEY, []),
+    runs: load(RUN_KEY, {}),
+    engine: null,
   };
 
   const el = {
-    form: document.getElementById('composerForm'),
-    postText: document.getElementById('postText'),
-    postType: document.getElementById('postType'),
-    parentPostSelect: document.getElementById('parentPostSelect'),
-    mediaFile: document.getElementById('mediaFile'),
-    isSponsored: document.getElementById('isSponsored'),
-    authorHandle: document.getElementById('authorHandle'),
-    authorSubMeta: document.getElementById('authorSubMeta'),
-    feed: document.getElementById('feed'),
-    manageList: document.getElementById('manageList'),
-    suggestionForm: document.getElementById('suggestionForm'),
-    suggestionHandle: document.getElementById('suggestionHandle'),
-    suggestionBio: document.getElementById('suggestionBio'),
-    suggestionManageList: document.getElementById('suggestionManageList'),
-    suggestionsList: document.getElementById('suggestionsList'),
-    searchInput: document.getElementById('searchInput'),
-    autoScrollEnabled: document.getElementById('autoScrollEnabled'),
-    scrollSpeed: document.getElementById('scrollSpeed'),
-    pauseAtPosts: document.getElementById('pauseAtPosts'),
+    simulationForm: document.getElementById('simulationForm'),
+    simulationList: document.getElementById('simulationList'),
+    feedButtonsView: document.getElementById('feedButtonsView'),
+    feedButtonList: document.getElementById('feedButtonList'),
+    simulationView: document.getElementById('simulationView'),
+    simulationCanvas: document.getElementById('simulationCanvas'),
+    activeSimName: document.getElementById('activeSimName'),
+    timerDisplay: document.getElementById('timerDisplay'),
+    playButton: document.getElementById('playButton'),
+    countdownOverlay: document.getElementById('countdownOverlay'),
+    statsButtonsView: document.getElementById('statsButtonsView'),
+    statsButtonList: document.getElementById('statsButtonList'),
+    statsDetailView: document.getElementById('statsDetailView'),
+    statsDetail: document.getElementById('statsDetail'),
+    statsBackButton: document.getElementById('statsBackButton'),
   };
 
+  function load(key, fallback) {
+    try {
+      return JSON.parse(localStorage.getItem(key) || 'null') || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function save() {
+    localStorage.setItem(SIM_KEY, JSON.stringify(state.simulations));
+    localStorage.setItem(RUN_KEY, JSON.stringify(state.runs));
+  }
+
   function uid() {
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   }
 
   function escapeHtml(str) {
@@ -51,413 +53,438 @@
       .replace(/'/g, '&#39;');
   }
 
-  function formatTextWithMentions(text) {
-    const safe = escapeHtml(text);
-    return safe.replace(/(^|\s)(@[a-zA-Z0-9_.-]+)/g, '$1<span class="mention">$2</span>');
-  }
-
-  function timeAgo(ts) {
-    const diffMin = Math.max(1, Math.floor((Date.now() - ts) / 60000));
-    if (diffMin < 60) return `${diffMin}m`;
-    const h = Math.floor(diffMin / 60);
-    if (h < 24) return `${h}h`;
-    return `${Math.floor(h / 24)}d`;
-  }
-
-  function avatarFor(author) {
-    const seed = encodeURIComponent(String(author).replace('@', ''));
-    return `https://api.dicebear.com/9.x/thumbs/svg?seed=${seed}`;
-  }
-
-  function seedPosts() {
-    const now = Date.now();
-    const p1 = uid();
-    const p2 = uid();
-    return [
-      {
-        id: p1,
-        type: 'post',
-        author: '@nova.wave',
-        subMeta: 'visual rehearsal',
-        text: 'Yeni editte @mono.synth ile ortak deneme yaptık. Gece çekimi için hazır.',
-        sponsored: false,
-        media: '',
-        createdAt: now - 1000 * 60 * 12,
-        pauseMs: 2400,
-        parentId: null,
-      },
-      {
-        id: p2,
-        type: 'post',
-        author: '@arc.light',
-        subMeta: 'loop tools',
-        text: 'Bu bir tanıtım gönderisidir. @studio.pulse için yeni görsel paket çıktı.',
-        sponsored: true,
-        media: '',
-        createdAt: now - 1000 * 60 * 10,
-        pauseMs: 2800,
-        parentId: null,
-      },
-      {
-        id: uid(),
-        type: 'comment',
-        author: '@grainframe',
-        subMeta: 'studio notes',
-        text: '@nova.wave palet çok iyi duruyor.',
-        sponsored: false,
-        media: '',
-        createdAt: now - 1000 * 60 * 8,
-        pauseMs: 0,
-        parentId: p1,
-      },
-    ];
-  }
-
-  function seedSuggestions() {
-    return [
-      { id: uid(), handle: '@blue.artist', bio: 'visual performer' },
-      { id: uid(), handle: '@ghost.user', bio: 'night cuts' },
-      { id: uid(), handle: '@mono.synth', bio: 'audio textures' },
-    ];
-  }
-
-  function loadData() {
-    try {
-      state.posts = JSON.parse(localStorage.getItem(POSTS_KEY) || 'null') || seedPosts();
-    } catch {
-      state.posts = seedPosts();
-    }
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
-
-    try {
-      state.suggestions = JSON.parse(localStorage.getItem(SUGGESTIONS_KEY) || 'null') || seedSuggestions();
-    } catch {
-      state.suggestions = seedSuggestions();
-    }
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
-  }
-
-  function persistPosts() {
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
-  }
-
-  function persistSuggestions() {
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
-  }
-
-  function getPosts() {
-    return state.posts.filter((x) => x.type === 'post').sort((a, b) => a.createdAt - b.createdAt);
-  }
-
-  function getCommentsFor(postId) {
-    return state.posts.filter((x) => x.type === 'comment' && x.parentId === postId).sort((a, b) => a.createdAt - b.createdAt);
-  }
-
-  function renderParentOptions() {
-    if (!el.parentPostSelect) return;
-    const options = ['<option value="">None</option>'];
-    for (const post of getPosts()) {
-      const text = escapeHtml(post.text.slice(0, 40));
-      options.push(`<option value="${post.id}">${escapeHtml(post.author)} — ${text}${post.text.length > 40 ? '…' : ''}</option>`);
-    }
-    el.parentPostSelect.innerHTML = options.join('');
-  }
-
-  function renderFeed() {
-    if (!el.feed) return;
-    const posts = getPosts();
-    if (!posts.length) {
-      el.feed.innerHTML = '<div class="empty-feed">No posts yet.</div>';
-      return;
-    }
-
-    el.feed.innerHTML = posts
-      .map((post) => {
-        const comments = getCommentsFor(post.id);
-        const media = post.media ? `<div class="media-wrap"><img class="media" src="${post.media}" alt="Attached media" /></div>` : '';
-        const commentsHtml = comments.length
-          ? `<section class="comments">${comments
-              .map((c) => `<p class="comment"><strong>${escapeHtml(c.author)}</strong> · <span class="timestamp">${timeAgo(c.createdAt)}</span><br>${formatTextWithMentions(c.text)}</p>`)
-              .join('')}</section>`
-          : '<section class="comments"></section>';
-
-        return `<article class="post-card" data-pause="${post.pauseMs || 0}">
-          <header class="post-head">
-            <img class="avatar" src="${avatarFor(post.author)}" alt="${escapeHtml(post.author)} avatar" />
-            <div>
-              <p class="meta-row"><span class="username">${escapeHtml(post.author)}</span> <span class="timestamp">· ${timeAgo(post.createdAt)}</span></p>
-              <p class="sub-meta">${escapeHtml(post.subMeta || 'music video drafts')}</p>
-            </div>
-            ${post.sponsored ? '<span class="sponsored-label">Sponsored</span>' : ''}
-          </header>
-          <p class="post-text">${formatTextWithMentions(post.text)}</p>
-          ${media}
-          <footer class="post-actions" aria-hidden="true">
-            <span>♡ ${Math.floor(Math.random() * 900 + 25)}</span>
-            <span>💬 ${comments.length}</span>
-            <span>↺ ${Math.floor(Math.random() * 70 + 3)}</span>
-          </footer>
-          ${commentsHtml}
-        </article>`;
-      })
-      .join('');
-  }
-
-  function renderManageList() {
-    if (!el.manageList) return;
-    const sorted = [...state.posts].sort((a, b) => b.createdAt - a.createdAt);
-    el.manageList.innerHTML = sorted
-      .map((item) => `<div class="manage-item">
-        <div>
-          <p><strong>${escapeHtml(item.author)}</strong> · <span>${item.type.toUpperCase()}</span> · <small>${timeAgo(item.createdAt)}</small></p>
-          <small>${escapeHtml(item.text.slice(0, 80))}${item.text.length > 80 ? '…' : ''}</small>
-        </div>
-        <button class="delete-btn" type="button" data-delete-post-id="${item.id}">Delete</button>
-      </div>`)
-      .join('');
-  }
-
-  function renderSuggestions() {
-    if (!el.suggestionsList) return;
-    const query = (el.searchInput?.value || '').trim().toLowerCase();
-    const list = state.suggestions.filter((s) =>
-      !query || s.handle.toLowerCase().includes(query) || s.bio.toLowerCase().includes(query)
-    );
-
-    el.suggestionsList.innerHTML = list
-      .map((s) => `<article class="suggestion-item">
-        <img src="${avatarFor(s.handle)}" alt="${escapeHtml(s.handle)} avatar" class="avatar mini" />
-        <div>
-          <p><strong>${escapeHtml(s.handle)}</strong></p>
-          <small>${escapeHtml(s.bio)}</small>
-        </div>
-        <button type="button">Takip et</button>
-      </article>`)
-      .join('');
-  }
-
-  function renderSuggestionManager() {
-    if (!el.suggestionManageList) return;
-    el.suggestionManageList.innerHTML = state.suggestions
-      .map((s) => `<div class="manage-item">
-        <div>
-          <p><strong>${escapeHtml(s.handle)}</strong></p>
-          <small>${escapeHtml(s.bio)}</small>
-        </div>
-        <button class="delete-btn" type="button" data-delete-suggestion-id="${s.id}">Delete</button>
-      </div>`)
-      .join('');
-  }
-
-  function refresh() {
-    renderParentOptions();
-    renderFeed();
-    renderManageList();
-    renderSuggestions();
-    renderSuggestionManager();
-  }
-
-  function toDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      if (!file) {
-        resolve('');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function onPublish(event) {
-    event.preventDefault();
-    const text = el.postText.value.trim();
-    if (!text) return;
-
-    const type = el.postType.value;
-    const parentId = type === 'comment' ? el.parentPostSelect.value || null : null;
-    if (type === 'comment' && !parentId) {
-      alert('Please select a parent post for comments.');
-      return;
-    }
-
-    const media = await toDataUrl(el.mediaFile.files?.[0] || null);
-
-    state.posts.push({
+  function createSimulationFromForm(form) {
+    const fd = new FormData(form);
+    const getNum = (id) => Number(fd.get(id));
+    const sim = {
       id: uid(),
-      type,
-      author: (el.authorHandle.value.trim() || '@studio.pulse').replace(/\s+/g, ''),
-      subMeta: el.authorSubMeta.value.trim() || 'music video draft',
-      text,
-      sponsored: Boolean(el.isSponsored.checked),
-      media,
+      name: String(fd.get('simName') || '').trim(),
+      backgroundColor: String(fd.get('backgroundColor') || '#6c6875'),
+      wallGap: getNum('wallGap'),
+      wallColor: String(fd.get('wallColor') || '#c70000'),
+      obstacleSize: getNum('obstacleSize'),
+      obstacleCount: getNum('obstacleCount'),
+      obstacleColor: String(fd.get('obstacleColor') || '#0b0b0b'),
+      ballSize: getNum('ballSize'),
+      ballColor: String(fd.get('ballColor') || '#21d7e6'),
+      ballSign: String(fd.get('ballSign') || '+'),
+      downBallCount: getNum('downBallCount'),
+      upBallCount: getNum('upBallCount'),
+      dropDuration: getNum('dropDuration'),
+      timerColor: String(fd.get('timerColor') || '#ffffff'),
+      timerSize: getNum('timerSize'),
       createdAt: Date.now(),
-      pauseMs: type === 'post' ? 2200 : 0,
-      parentId,
-    });
+    };
 
-    persistPosts();
-    refresh();
-
-    el.form.reset();
-    el.authorHandle.value = '@studio.pulse';
-    el.authorSubMeta.value = 'music video draft';
-  }
-
-  function deletePostOrComment(id) {
-    const item = state.posts.find((x) => x.id === id);
-    if (!item) return;
-
-    if (item.type === 'post') {
-      state.posts = state.posts.filter((x) => x.id !== id && x.parentId !== id);
-    } else {
-      state.posts = state.posts.filter((x) => x.id !== id);
+    if (!sim.name) {
+      alert('Simülasyon adı zorunlu.');
+      return null;
     }
 
-    persistPosts();
-    refresh();
+    if (sim.downBallCount + sim.upBallCount < 1) {
+      alert('En az 1 top olmalı.');
+      return null;
+    }
+
+    return sim;
   }
 
-  function onAddSuggestion(event) {
-    event.preventDefault();
-    const handle = el.suggestionHandle.value.trim();
-    const bio = el.suggestionBio.value.trim();
-    if (!handle || !bio) return;
+  function renderAdminList() {
+    if (!el.simulationList) return;
+    if (!state.simulations.length) {
+      el.simulationList.innerHTML = '<p>Henüz simülasyon yok.</p>';
+      return;
+    }
 
-    const normalized = handle.startsWith('@') ? handle : `@${handle}`;
-    state.suggestions.unshift({ id: uid(), handle: normalized, bio });
-    persistSuggestions();
-    renderSuggestions();
-    renderSuggestionManager();
-    el.suggestionForm.reset();
+    el.simulationList.innerHTML = state.simulations
+      .map((sim) => `
+        <article class="item-row">
+          <div>
+            <p><strong>${escapeHtml(sim.name)}</strong></p>
+            <small>Toplam top: ${sim.downBallCount + sim.upBallCount} • Engel: ${sim.obstacleCount} • Süre: ${sim.dropDuration}s</small>
+          </div>
+          <button class="btn" data-delete-id="${sim.id}">Sil</button>
+        </article>
+      `)
+      .join('');
   }
 
-  function deleteSuggestion(id) {
-    state.suggestions = state.suggestions.filter((x) => x.id !== id);
-    persistSuggestions();
-    renderSuggestions();
-    renderSuggestionManager();
+  function renderFeedButtons() {
+    if (!el.feedButtonList) return;
+    if (!state.simulations.length) {
+      el.feedButtonList.innerHTML = '<p>Kayıtlı simülasyon yok. Önce Admin sayfasından oluşturun.</p>';
+      return;
+    }
+
+    el.feedButtonList.innerHTML = state.simulations
+      .map((sim) => `<button class="btn launch-btn" data-launch-id="${sim.id}">${escapeHtml(sim.name)}</button>`)
+      .join('');
   }
 
-  function maybePauseAtPost(now) {
-    if (!state.pauseAtPosts || page !== 'feed') return;
+  function renderStatsButtons() {
+    if (!el.statsButtonList) return;
+    if (!state.simulations.length) {
+      el.statsButtonList.innerHTML = '<p>Kayıtlı simülasyon yok.</p>';
+      return;
+    }
 
-    const cards = Array.from(document.querySelectorAll('.post-card'));
-    for (const card of cards) {
-      if (card.dataset.paused === '1') continue;
-      const pauseMs = Number(card.dataset.pause || 0);
-      if (!pauseMs) continue;
-      const rect = card.getBoundingClientRect();
-      if (rect.top >= 70 && rect.top <= 160) {
-        card.dataset.paused = '1';
-        state.isPaused = true;
-        state.pauseUntil = now + pauseMs;
-        break;
+    el.statsButtonList.innerHTML = state.simulations
+      .map((sim) => `<button class="btn launch-btn" data-stats-id="${sim.id}">${escapeHtml(sim.name)}</button>`)
+      .join('');
+  }
+
+  function buildRandomObstacles(sim, width, height, leftWallX, rightWallX) {
+    const obstacles = [];
+    const count = sim.obstacleCount;
+    const r = sim.obstacleSize;
+    const margin = Math.max(r + sim.ballSize + 12, 24);
+    const topBand = sim.upBallCount > 0 ? 72 : 20;
+    const bottomBand = sim.downBallCount > 0 ? 72 : 20;
+
+    for (let i = 0; i < count; i += 1) {
+      let tries = 0;
+      let ok = false;
+      while (!ok && tries < 80) {
+        tries += 1;
+        const x = leftWallX + margin + Math.random() * Math.max(10, (rightWallX - leftWallX - margin * 2));
+        const y = topBand + margin + Math.random() * Math.max(10, (height - topBand - bottomBand - margin * 2));
+
+        let tooClose = false;
+        for (const prev of obstacles) {
+          const dx = prev.x - x;
+          const dy = prev.y - y;
+          if (Math.hypot(dx, dy) < r * 2 + 22) {
+            tooClose = true;
+            break;
+          }
+        }
+
+        if (!tooClose) {
+          obstacles.push({ x, y, r });
+          ok = true;
+        }
       }
     }
+
+    return obstacles;
   }
 
-  function maybeResetLoop() {
-    if (state.loopResetPending || page !== 'feed') return;
-    const nearEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
-    if (!nearEnd) return;
+  function createBalls(sim, width, height, leftWallX, rightWallX) {
+    const balls = [];
+    const makeBall = (dir) => {
+      const yStart = dir > 0 ? sim.ballSize + 14 : height - sim.ballSize - 14;
+      return {
+        x: leftWallX + sim.ballSize + 14 + Math.random() * (rightWallX - leftWallX - (sim.ballSize + 14) * 2),
+        y: yStart,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: dir * (1.2 + Math.random() * 0.3),
+        done: false,
+      };
+    };
 
-    state.loopResetPending = true;
-    window.setTimeout(() => {
-      document.querySelectorAll('.post-card').forEach((card) => delete card.dataset.paused);
-      window.scrollTo({ top: 0, behavior: 'auto' });
-      state.loopResetPending = false;
-    }, 900);
+    for (let i = 0; i < sim.downBallCount; i += 1) balls.push(makeBall(1));
+    for (let i = 0; i < sim.upBallCount; i += 1) balls.push(makeBall(-1));
+
+    return balls;
   }
 
-  function tick(now) {
-    if (page !== 'feed' || !state.autoScroll) {
-      state.lastTime = now;
-      requestAnimationFrame(tick);
+  function setupEngine(sim) {
+    const canvas = el.simulationCanvas;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    const gap = Math.min(sim.wallGap, width - 80);
+    const leftWallX = (width - gap) / 2;
+    const rightWallX = leftWallX + gap;
+
+    const engine = {
+      sim,
+      ctx,
+      width,
+      height,
+      leftWallX,
+      rightWallX,
+      obstacles: buildRandomObstacles(sim, width, height, leftWallX, rightWallX),
+      balls: createBalls(sim, width, height, leftWallX, rightWallX),
+      running: false,
+      startedAt: 0,
+      rafId: 0,
+      elapsed: 0,
+    };
+
+    return engine;
+  }
+
+  function draw(engine) {
+    const { ctx, width, height, sim, leftWallX, rightWallX } = engine;
+    ctx.fillStyle = sim.backgroundColor;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = sim.wallColor;
+    const wallW = 28;
+    ctx.fillRect(leftWallX - wallW, 0, wallW, height);
+    ctx.fillRect(rightWallX, 0, wallW, height);
+
+    ctx.fillStyle = sim.obstacleColor;
+    for (const o of engine.obstacles) {
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (const b of engine.balls) {
+      ctx.fillStyle = sim.ballColor;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, sim.ballSize, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#071118';
+      ctx.font = `${sim.ballSize + 4}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(sim.ballSign, b.x, b.y + 1);
+    }
+  }
+
+  function update(engine, dt) {
+    const { sim, leftWallX, rightWallX, height } = engine;
+    const radius = sim.ballSize;
+
+    for (const b of engine.balls) {
+      if (b.done) continue;
+
+      b.vy += (b.vy > 0 ? 0.005 : -0.005) * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+
+      if (b.x - radius < leftWallX) {
+        b.x = leftWallX + radius;
+        b.vx = Math.abs(b.vx) * 0.85;
+      }
+      if (b.x + radius > rightWallX) {
+        b.x = rightWallX - radius;
+        b.vx = -Math.abs(b.vx) * 0.85;
+      }
+
+      for (const o of engine.obstacles) {
+        const dx = b.x - o.x;
+        const dy = b.y - o.y;
+        const dist = Math.hypot(dx, dy) || 0.001;
+        const minDist = radius + o.r;
+        if (dist >= minDist) continue;
+
+        const nx = dx / dist;
+        const ny = dy / dist;
+        b.x = o.x + nx * minDist;
+        b.y = o.y + ny * minDist;
+
+        const vDot = b.vx * nx + b.vy * ny;
+        b.vx = (b.vx - 2 * vDot * nx) * 0.78;
+        b.vy = (b.vy - 2 * vDot * ny) * 0.78;
+        b.vx += (Math.random() - 0.5) * 0.3;
+      }
+
+      const elapsedSec = engine.elapsed / 1000;
+      const remain = Math.max(0.08, sim.dropDuration - elapsedSec);
+      if (b.vy > 0) {
+        const need = (height - radius - b.y) / remain;
+        b.vy = Math.max(b.vy, need * 0.9);
+      } else {
+        const need = (b.y - radius) / remain;
+        b.vy = Math.min(b.vy, -need * 0.9);
+      }
+
+      if (b.vy > 0 && b.y >= height - radius) b.done = true;
+      if (b.vy < 0 && b.y <= radius) b.done = true;
+    }
+  }
+
+  function runSimulationLoop() {
+    const engine = state.engine;
+    if (!engine || !engine.running) return;
+
+    const now = performance.now();
+    const dt = Math.min(24, now - engine.startedAt - engine.elapsed);
+    engine.elapsed = now - engine.startedAt;
+
+    update(engine, dt * 0.08);
+    draw(engine);
+    const elapsedSec = engine.elapsed / 1000;
+    el.timerDisplay.textContent = `${elapsedSec.toFixed(1)}s`;
+
+    const allDone = engine.balls.every((b) => b.done);
+    if (allDone || elapsedSec >= engine.sim.dropDuration + 0.25) {
+      engine.running = false;
+      finishSimulation(engine);
       return;
     }
 
-    maybeResetLoop();
+    engine.rafId = requestAnimationFrame(runSimulationLoop);
+  }
 
-    if (state.isPaused) {
-      if (now >= state.pauseUntil) state.isPaused = false;
-      state.lastTime = now;
-      requestAnimationFrame(tick);
+  function finishSimulation(engine) {
+    const total = engine.balls.length;
+    const sign = engine.sim.ballSign;
+    const plus = sign === '+' ? total : 0;
+    const minus = sign === '-' ? total : 0;
+    const elapsed = Number((engine.elapsed / 1000).toFixed(3));
+
+    state.runs[engine.sim.id] = {
+      simulationId: engine.sim.id,
+      simulationName: engine.sim.name,
+      plusCount: plus,
+      minusCount: minus,
+      totalCount: total,
+      elapsedSec: elapsed,
+      current: Number(((plus + minus) / Math.max(elapsed, 0.001)).toFixed(3)),
+      finishedAt: Date.now(),
+    };
+    save();
+
+    setTimeout(() => {
+      el.simulationView.classList.add('hidden');
+      el.feedButtonsView.classList.remove('hidden');
+      state.engine = null;
+      renderFeedButtons();
+    }, 700);
+  }
+
+  function showCountdown(startFn) {
+    let n = 3;
+    el.countdownOverlay.classList.remove('hidden');
+    el.countdownOverlay.textContent = String(n);
+    const iv = setInterval(() => {
+      n -= 1;
+      if (n <= 0) {
+        clearInterval(iv);
+        el.countdownOverlay.classList.add('hidden');
+        startFn();
+      } else {
+        el.countdownOverlay.textContent = String(n);
+      }
+    }, 1000);
+  }
+
+  function openSimulation(simId) {
+    const sim = state.simulations.find((x) => x.id === simId);
+    if (!sim) return;
+
+    el.feedButtonsView.classList.add('hidden');
+    el.simulationView.classList.remove('hidden');
+    el.activeSimName.textContent = sim.name;
+    el.timerDisplay.style.color = sim.timerColor;
+    el.timerDisplay.style.fontSize = `${sim.timerSize}px`;
+    el.timerDisplay.textContent = '0.0s';
+
+    state.engine = setupEngine(sim);
+    draw(state.engine);
+
+    el.playButton.disabled = false;
+    el.playButton.onclick = () => {
+      el.playButton.disabled = true;
+      showCountdown(() => {
+        if (!state.engine) return;
+        state.engine.running = true;
+        state.engine.startedAt = performance.now();
+        state.engine.elapsed = 0;
+        runSimulationLoop();
+      });
+    };
+  }
+
+  function showStats(simId) {
+    const sim = state.simulations.find((x) => x.id === simId);
+    if (!sim) return;
+
+    const run = state.runs[sim.id];
+    el.statsButtonsView.classList.add('hidden');
+    el.statsDetailView.classList.remove('hidden');
+
+    if (!run) {
+      el.statsDetail.innerHTML = `<h3>${escapeHtml(sim.name)}</h3><p>Henüz bu simülasyon oynatılmadı.</p>`;
       return;
     }
 
-    const delta = (now - state.lastTime) / 1000;
-    window.scrollBy(0, state.speedPxPerSecond * delta);
-    maybePauseAtPost(now);
-    state.lastTime = now;
-    requestAnimationFrame(tick);
+    el.statsDetail.innerHTML = `
+      <h3>${escapeHtml(run.simulationName)}</h3>
+      <p>Geçen + yük sayısı : ${run.plusCount}</p>
+      <p>Geçen - yük sayısı : ${run.minusCount}</p>
+      <p>Toplam yük sayısı : ${run.totalCount}</p>
+      <p>Geçen süre : ${run.elapsedSec} sn</p>
+      <p><strong>SONUÇ</strong></p>
+      <p>Akım Büyüklüğü : ${run.totalCount} / ${run.elapsedSec} = ${run.current}</p>
+    `;
   }
 
-  function bindEvents() {
-    if (el.postType && el.parentPostSelect) {
-      el.postType.addEventListener('change', () => {
-        el.parentPostSelect.disabled = el.postType.value !== 'comment';
-      });
-      el.parentPostSelect.disabled = true;
-    }
+  function wireAdmin() {
+    renderAdminList();
 
-    if (el.form) {
-      el.form.addEventListener('submit', onPublish);
-    }
+    el.simulationForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const sim = createSimulationFromForm(el.simulationForm);
+      if (!sim) return;
+      state.simulations.unshift(sim);
+      save();
+      renderAdminList();
+      el.simulationForm.reset();
+      document.getElementById('wallGap').value = '760';
+      document.getElementById('obstacleCount').value = '18';
+      document.getElementById('downBallCount').value = '8';
+      document.getElementById('dropDuration').value = '14';
+    });
 
-    if (el.manageList) {
-      el.manageList.addEventListener('click', (event) => {
-        const btn = event.target.closest('[data-delete-post-id]');
-        if (!btn) return;
-        deletePostOrComment(btn.getAttribute('data-delete-post-id'));
-      });
-    }
+    el.simulationList.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-delete-id]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-delete-id');
+      state.simulations = state.simulations.filter((x) => x.id !== id);
+      delete state.runs[id];
+      save();
+      renderAdminList();
+    });
+  }
 
-    if (el.suggestionForm) {
-      el.suggestionForm.addEventListener('submit', onAddSuggestion);
-    }
+  function wireFeed() {
+    renderFeedButtons();
+    el.feedButtonList.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-launch-id]');
+      if (!btn) return;
+      openSimulation(btn.getAttribute('data-launch-id'));
+    });
+  }
 
-    if (el.suggestionManageList) {
-      el.suggestionManageList.addEventListener('click', (event) => {
-        const btn = event.target.closest('[data-delete-suggestion-id]');
-        if (!btn) return;
-        deleteSuggestion(btn.getAttribute('data-delete-suggestion-id'));
-      });
-    }
+  function wireStats() {
+    renderStatsButtons();
+    el.statsButtonList.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-stats-id]');
+      if (!btn) return;
+      showStats(btn.getAttribute('data-stats-id'));
+    });
 
-    if (el.searchInput) {
-      el.searchInput.addEventListener('input', renderSuggestions);
-    }
+    el.statsBackButton.addEventListener('click', () => {
+      el.statsDetailView.classList.add('hidden');
+      el.statsButtonsView.classList.remove('hidden');
+    });
+  }
 
-    if (el.autoScrollEnabled) {
-      el.autoScrollEnabled.addEventListener('change', () => {
-        state.autoScroll = el.autoScrollEnabled.checked;
-      });
-    }
-
-    if (el.pauseAtPosts) {
-      el.pauseAtPosts.addEventListener('change', () => {
-        state.pauseAtPosts = el.pauseAtPosts.checked;
-      });
-    }
-
-    if (el.scrollSpeed) {
-      el.scrollSpeed.addEventListener('input', () => {
-        state.speedPxPerSecond = Number(el.scrollSpeed.value);
-      });
+  function assignFormNames() {
+    const ids = [
+      'simName', 'backgroundColor', 'wallGap', 'wallColor', 'obstacleSize', 'obstacleCount',
+      'obstacleColor', 'ballSize', 'ballColor', 'ballSign', 'downBallCount', 'upBallCount',
+      'dropDuration', 'timerColor', 'timerSize',
+    ];
+    for (const id of ids) {
+      const input = document.getElementById(id);
+      if (input) input.name = id;
     }
   }
 
   function init() {
-    loadData();
-    refresh();
-    bindEvents();
-
-    requestAnimationFrame((start) => {
-      state.lastTime = start;
-      requestAnimationFrame(tick);
-    });
+    assignFormNames();
+    if (page === 'admin') wireAdmin();
+    if (page === 'feed') wireFeed();
+    if (page === 'stats') wireStats();
   }
 
   init();

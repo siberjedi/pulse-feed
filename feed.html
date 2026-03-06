@@ -1,70 +1,41 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse Feed</title>
+  <title>Simülasyon Feed</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body data-page="feed">
-  <div class="layout">
-    <aside class="sidebar left-sidebar" aria-label="Navigation">
-      <div class="left-brand">
-        <img src="PulseWhite.svg" alt="Pulse logo" class="left-brand-logo" />
-        <h2>Pulse</h2>
-      </div>
-
-      <nav class="menu" aria-label="Main menu">
-        <a href="feed.html">Anasayfa</a>
-        <a href="feed.html">Keşfet</a>
-        <a href="feed.html">Bildirimler</a>
-        <a href="feed.html">Mesajlar</a>
-        <a href="feed.html">Premium $</a>
+  <main class="app">
+    <header class="page-header">
+      <h1>Simülasyon Feed</h1>
+      <nav class="top-nav">
+        <a href="admin.html">Admin</a>
+        <a class="active" href="feed.html">Feed</a>
+        <a href="stats.html">Stats</a>
       </nav>
-    </aside>
+    </header>
 
-    <main class="app-shell">
-      <header class="top-bar">
-        <div class="brand">
-          <img src="PulseWhite.svg" alt="Pulse logo" class="brand-logo" />
-          <h1>Pulse</h1>
-        </div>
-        <div class="mode-switch" role="tablist" aria-label="Mode switch">
-          <a href="admin.html" class="tab-btn">Composer / Admin</a>
-          <a href="feed.html" class="tab-btn active">Feed</a>
-        </div>
-      </header>
+    <section id="feedButtonsView" class="card">
+      <h2>Oynatılabilir Simülasyonlar</h2>
+      <div id="feedButtonList" class="button-grid"></div>
+    </section>
 
-      <section class="panel" aria-label="Pulse feed mode">
-        <div class="feed-controls">
-          <label class="checkbox-line">
-            <input id="autoScrollEnabled" type="checkbox" checked />
-            Auto-scroll
-          </label>
-
-          <label>
-            Speed
-            <input id="scrollSpeed" type="range" min="10" max="90" value="34" />
-          </label>
-
-          <label class="checkbox-line">
-            <input id="pauseAtPosts" type="checkbox" checked />
-            Pause at posts
-          </label>
-        </div>
-
-        <section id="feed" class="feed" aria-label="Feed timeline"></section>
-      </section>
-    </main>
-
-    <aside class="sidebar right-sidebar" aria-label="Discover and follow">
-      <input id="searchInput" type="text" placeholder="Ara..." class="search-input" />
-      <section class="suggestions">
-        <h3>Takip önerileri</h3>
-        <div id="suggestionsList"></div>
-      </section>
-    </aside>
-  </div>
+    <section id="simulationView" class="card hidden">
+      <div class="sim-head">
+        <h2 id="activeSimName">-</h2>
+        <div id="timerDisplay" class="timer">0.0s</div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="simulationCanvas" width="1000" height="620"></canvas>
+        <div id="countdownOverlay" class="countdown hidden">3</div>
+      </div>
+      <div class="sim-controls">
+        <button id="playButton" class="btn primary">▶ Play</button>
+      </div>
+    </section>
+  </main>
 
   <script src="script.js"></script>
 </body>
