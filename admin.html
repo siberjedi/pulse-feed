@@ -19,64 +19,94 @@
 
     <section class="card">
       <h2>Yeni Simülasyon</h2>
-      <form id="simulationForm" class="grid-form">
-        <label>Simülasyon adı
-          <input id="simName" type="text" required placeholder="Örn: Test #1" />
-        </label>
-        <label>Arkaplan rengi
-          <input id="backgroundColor" type="color" value="#6c6875" />
-        </label>
-        <label>Duvar aralığı (px)
-          <input id="wallGap" type="number" min="240" max="1000" value="760" />
-        </label>
-        <label>Duvar rengi
-          <input id="wallColor" type="color" value="#c70000" />
-        </label>
-        <label>Engel boyutu (yarıçap px)
-          <input id="obstacleSize" type="number" min="6" max="40" value="24" />
-        </label>
-        <label>Engel sayısı
-          <input id="obstacleCount" type="number" min="4" max="120" value="18" />
-        </label>
-        <label>Engel rengi
-          <input id="obstacleColor" type="color" value="#0b0b0b" />
-        </label>
-        <label>Top boyutu (yarıçap px)
-          <input id="ballSize" type="number" min="6" max="30" value="18" />
-        </label>
-        <label>Aşağı giden top sayısı
-          <input id="downBallCount" type="number" min="0" max="200" value="8" />
-        </label>
-        <label>Aşağı giden top rengi
-          <input id="downBallColor" type="color" value="#21d7e6" />
-        </label>
-        <label>Aşağı giden top işareti
-          <select id="downBallSign">
-            <option value="+">+</option>
-            <option value="-">-</option>
-          </select>
-        </label>
-        <label>Yukarı giden top sayısı
-          <input id="upBallCount" type="number" min="0" max="200" value="0" />
-        </label>
-        <label>Yukarı giden top rengi
-          <input id="upBallColor" type="color" value="#ffd166" />
-        </label>
-        <label>Yukarı giden top işareti
-          <select id="upBallSign">
-            <option value="+">+</option>
-            <option value="-">-</option>
-          </select>
-        </label>
-        <label>Düşme / geçiş süresi (sn)
-          <input id="dropDuration" type="number" min="3" max="180" value="14" />
-        </label>
-        <label>Timer rengi
-          <input id="timerColor" type="color" value="#ffffff" />
-        </label>
-        <label>Timer yazı boyutu (px)
-          <input id="timerSize" type="number" min="16" max="80" value="28" />
-        </label>
+      <form id="simulationForm" class="group-form">
+        <fieldset class="form-section">
+          <legend>1) Simülasyon adı</legend>
+          <div class="section-grid one-col">
+            <label>Simülasyon adı
+              <input id="simName" type="text" required placeholder="Örn: Test #1" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend>2) Duvar ve engel ayarları</legend>
+          <div class="section-grid">
+            <label>Arkaplan rengi
+              <input id="backgroundColor" type="color" value="#6c6875" />
+            </label>
+            <label>Duvar aralığı (px)
+              <input id="wallGap" type="number" min="240" max="1000" value="760" />
+            </label>
+            <label>Duvar rengi
+              <input id="wallColor" type="color" value="#c70000" />
+            </label>
+            <label>Engel boyutu (yarıçap px)
+              <input id="obstacleSize" type="number" min="6" max="40" value="24" />
+            </label>
+            <label>Engel sayısı
+              <input id="obstacleCount" type="number" min="4" max="120" value="18" />
+            </label>
+            <label>Engel rengi
+              <input id="obstacleColor" type="color" value="#0b0b0b" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend>3) Yukarı top ayarları</legend>
+          <div class="section-grid">
+            <label>Top boyutu (yarıçap px)
+              <input id="ballSize" type="number" min="6" max="30" value="18" />
+            </label>
+            <label>Yukarı giden top sayısı
+              <input id="upBallCount" type="number" min="0" max="200" value="0" />
+            </label>
+            <label>Yukarı giden top rengi
+              <input id="upBallColor" type="color" value="#ffd166" />
+            </label>
+            <label>Yukarı giden top işareti
+              <select id="upBallSign">
+                <option value="+">+</option>
+                <option value="-">-</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend>4) Aşağı top ayarları</legend>
+          <div class="section-grid">
+            <label>Aşağı giden top sayısı
+              <input id="downBallCount" type="number" min="0" max="200" value="8" />
+            </label>
+            <label>Aşağı giden top rengi
+              <input id="downBallColor" type="color" value="#21d7e6" />
+            </label>
+            <label>Aşağı giden top işareti
+              <select id="downBallSign">
+                <option value="+">+</option>
+                <option value="-">-</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend>5) Süre ayarları</legend>
+          <div class="section-grid">
+            <label>Düşme / geçiş süresi (sn)
+              <input id="dropDuration" type="number" min="3" max="180" value="14" />
+            </label>
+            <label>Timer rengi
+              <input id="timerColor" type="color" value="#ffffff" />
+            </label>
+            <label>Timer yazı boyutu (px)
+              <input id="timerSize" type="number" min="16" max="80" value="28" />
+            </label>
+          </div>
+        </fieldset>
+
         <button type="submit" class="btn primary">Simülasyonu Kaydet</button>
       </form>
     </section>

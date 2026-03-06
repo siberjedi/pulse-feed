@@ -65,6 +65,39 @@ h2 {
   margin-top: 0;
 }
 
+
+.group-form {
+  display: grid;
+  gap: 12px;
+}
+
+.form-section {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: #121823;
+}
+
+.form-section legend {
+  color: #cdd8ea;
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.section-grid.one-col {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.stats-result {
+  color: #64e98a;
+}
+
 .grid-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));

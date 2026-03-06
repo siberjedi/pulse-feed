@@ -69,14 +69,23 @@
   function getDirectionStyle(sim, dir) {
     if (dir > 0) {
       return {
-        color: sim.downBallColor || sim.ballColor || '#21d7e6',
-        sign: sim.downBallSign || sim.ballSign || '+',
+        color: sim.downBallColor || '#21d7e6',
+        sign: sim.downBallSign || '+',
       };
     }
     return {
-      color: sim.upBallColor || sim.ballColor || '#ffd166',
-      sign: sim.upBallSign || sim.ballSign || '-',
+      color: sim.upBallColor || '#ffd166',
+      sign: sim.upBallSign || '-',
     };
+  }
+
+
+
+  function getSignColor(sim, sign) {
+    if (sim.downBallSign === sign && sim.downBallCount > 0) return sim.downBallColor || '#21d7e6';
+    if (sim.upBallSign === sign && sim.upBallCount > 0) return sim.upBallColor || '#ffd166';
+    if (sign === '+') return '#7ee7ff';
+    return '#ffd166';
   }
 
   function computeSignTotals(sim) {
@@ -261,13 +270,13 @@
     }
 
     const signTotals = computeSignTotals(sim);
-    const elapsedSec = Math.max(1, Math.round(sim.dropDuration));
+    const elapsedSec = Math.max(1, Number(sim.dropDuration));
     sim.precomputedRun = {
       plusCount: signTotals.plus,
       minusCount: signTotals.minus,
       totalCount: sim.ballPlans.length,
       elapsedSec,
-      current: Math.floor(sim.ballPlans.length / elapsedSec),
+      current: Number((sim.ballPlans.length / elapsedSec).toFixed(3)),
     };
     sim.compileStatus = 'Tamamlandı';
     sim.compileError = '';
@@ -385,7 +394,7 @@
   function finishSimulation(engine) {
     const signTotals = computeSignTotals(engine.sim);
     const total = engine.sim.ballPlans.length;
-    const enteredDuration = Math.max(1, Math.round(engine.sim.dropDuration));
+    const enteredDuration = Math.max(1, Number(engine.sim.dropDuration));
     state.runs[engine.sim.id] = {
       simulationId: engine.sim.id,
       simulationName: engine.sim.name,
@@ -393,7 +402,9 @@
       minusCount: signTotals.minus,
       totalCount: total,
       elapsedSec: enteredDuration,
-      current: Math.floor(total / enteredDuration),
+      current: Number((total / enteredDuration).toFixed(3)),
+      plusColor: getSignColor(engine.sim, '+'),
+      minusColor: getSignColor(engine.sim, '-'),
       finishedAt: Date.now(),
     };
     save();
@@ -463,13 +474,16 @@
       return;
     }
 
+    const plusColor = run.plusColor || getSignColor(sim, '+');
+    const minusColor = run.minusColor || getSignColor(sim, '-');
+
     el.statsDetail.innerHTML = `
       <h3>${escapeHtml(run.simulationName)}</h3>
-      <p>Geçen + yük sayısı : ${run.plusCount}</p>
-      <p>Geçen - yük sayısı : ${run.minusCount}</p>
+      <p style="color:${plusColor}">Geçen + yük sayısı : ${run.plusCount}</p>
+      <p style="color:${minusColor}">Geçen - yük sayısı : ${run.minusCount}</p>
       <p>Toplam yük sayısı : ${run.totalCount}</p>
       <p>Geçen süre : ${run.elapsedSec} sn</p>
-      <p><strong>SONUÇ</strong></p>
+      <p class="stats-result"><strong>SONUÇ</strong></p>
       <p>Akım Büyüklüğü : ${run.totalCount} / ${run.elapsedSec} = ${run.current}</p>
     `;
   }
