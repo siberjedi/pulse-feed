@@ -1,7 +1,10 @@
 (() => {
-  const SIM_KEY = 'plinko.simulations.v1';
-  const RUN_KEY = 'plinko.runs.v1';
+  const SIM_KEY = 'plinko.simulations.v2';
+  const RUN_KEY = 'plinko.runs.v2';
   const page = document.body.dataset.page;
+
+  const CANVAS_WIDTH = 1000;
+  const CANVAS_HEIGHT = 620;
 
   const state = {
     simulations: load(SIM_KEY, []),
@@ -53,6 +56,16 @@
       .replace(/'/g, '&#39;');
   }
 
+  function seeded(seed) {
+    let t = seed >>> 0;
+    return () => {
+      t += 0x6d2b79f5;
+      let x = Math.imul(t ^ (t >>> 15), 1 | t);
+      x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
   function createSimulationFromForm(form) {
     const fd = new FormData(form);
     const getNum = (id) => Number(fd.get(id));
@@ -74,6 +87,11 @@
       timerColor: String(fd.get('timerColor') || '#ffffff'),
       timerSize: getNum('timerSize'),
       createdAt: Date.now(),
+      compileStatus: 'Devam Ediyor',
+      compileError: '',
+      layout: null,
+      ballPlans: [],
+      precomputedRun: null,
     };
 
     if (!sim.name) {
@@ -89,6 +107,152 @@
     return sim;
   }
 
+  function buildLayoutAndPlans(sim) {
+    const seedNumber = Number(String(sim.createdAt).slice(-9)) ^ sim.name.length;
+    const rand = seeded(seedNumber);
+
+    const width = CANVAS_WIDTH;
+    const height = CANVAS_HEIGHT;
+    const gap = Math.min(sim.wallGap, width - 80);
+    const leftWallX = (width - gap) / 2;
+    const rightWallX = leftWallX + gap;
+
+    const obstacles = [];
+    const margin = Math.max(sim.obstacleSize + sim.ballSize + 12, 26);
+    const topBand = sim.upBallCount > 0 ? 78 : 20;
+    const bottomBand = sim.downBallCount > 0 ? 78 : 20;
+
+    for (let i = 0; i < sim.obstacleCount; i += 1) {
+      let ok = false;
+      let tries = 0;
+      while (!ok && tries < 120) {
+        tries += 1;
+        const x = leftWallX + margin + rand() * Math.max(10, (rightWallX - leftWallX - margin * 2));
+        const y = topBand + margin + rand() * Math.max(10, (height - topBand - bottomBand - margin * 2));
+        let tooClose = false;
+        for (const prev of obstacles) {
+          if (Math.hypot(prev.x - x, prev.y - y) < sim.obstacleSize * 2 + 18) {
+            tooClose = true;
+            break;
+          }
+        }
+        if (!tooClose) {
+          obstacles.push({ x: Number(x.toFixed(2)), y: Number(y.toFixed(2)), r: sim.obstacleSize });
+          ok = true;
+        }
+      }
+    }
+
+    const ballPlans = [];
+    const total = sim.downBallCount + sim.upBallCount;
+    const maxSpawnMs = Math.max(500, sim.dropDuration * 1000 * 0.55);
+    const spawnInterval = total <= 1 ? 0 : maxSpawnMs / (total - 1);
+
+    const makePlan = (dir, idx) => {
+      const spawnMs = Math.round(idx * spawnInterval);
+      const xPad = sim.ballSize + 18;
+      const startX = leftWallX + xPad + rand() * (rightWallX - leftWallX - xPad * 2);
+      const endOffset = (rand() - 0.5) * 34;
+      ballPlans.push({
+        id: uid(),
+        dir,
+        spawnMs,
+        startX: Number(startX.toFixed(2)),
+        endOffset: Number(endOffset.toFixed(2)),
+        amp1: Number((16 + rand() * 40).toFixed(2)),
+        amp2: Number((6 + rand() * 22).toFixed(2)),
+        phase1: Number((rand() * Math.PI * 2).toFixed(4)),
+        phase2: Number((rand() * Math.PI * 2).toFixed(4)),
+      });
+    };
+
+    let index = 0;
+    for (let i = 0; i < sim.downBallCount; i += 1) {
+      makePlan(1, index);
+      index += 1;
+    }
+    for (let i = 0; i < sim.upBallCount; i += 1) {
+      makePlan(-1, index);
+      index += 1;
+    }
+
+    return {
+      layout: { width, height, leftWallX, rightWallX, obstacles },
+      ballPlans,
+    };
+  }
+
+  function computeBallPosition(sim, layout, plan, elapsedMs) {
+    if (elapsedMs < plan.spawnMs) return null;
+
+    const radius = sim.ballSize;
+    const travelMs = Math.max(300, sim.dropDuration * 1000 - plan.spawnMs);
+    const localT = Math.min(1, (elapsedMs - plan.spawnMs) / travelMs);
+
+    const startY = plan.dir > 0 ? radius + 14 : layout.height - radius - 14;
+    const endY = plan.dir > 0 ? layout.height - radius : radius;
+    const y = startY + (endY - startY) * localT;
+
+    let x = plan.startX + plan.endOffset * localT;
+    x += Math.sin(localT * Math.PI * 2.8 + plan.phase1) * plan.amp1;
+    x += Math.sin(localT * Math.PI * 7.4 + plan.phase2) * plan.amp2;
+
+    for (const o of layout.obstacles) {
+      const dx = x - o.x;
+      const dy = y - o.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const influence = sim.ballSize + o.r + 22;
+      if (dist < influence) {
+        const push = (influence - dist) * 0.9;
+        x += (dx / dist) * push;
+      }
+    }
+
+    const minX = layout.leftWallX + radius;
+    const maxX = layout.rightWallX - radius;
+    x = Math.max(minX, Math.min(maxX, x));
+
+    return {
+      x,
+      y,
+      done: localT >= 1,
+      active: true,
+    };
+  }
+
+  function runPrecompute(sim) {
+    const built = buildLayoutAndPlans(sim);
+    sim.layout = built.layout;
+    sim.ballPlans = built.ballPlans;
+
+    const finalElapsed = sim.dropDuration * 1000;
+    const doneCount = sim.ballPlans.reduce((acc, plan) => {
+      const pos = computeBallPosition(sim, sim.layout, plan, finalElapsed);
+      return acc + (pos && pos.done ? 1 : 0);
+    }, 0);
+
+    const totalCount = sim.ballPlans.length;
+    if (doneCount !== totalCount) {
+      sim.compileStatus = 'Hata';
+      sim.compileError = 'Ön hesaplama tamamlanamadı.';
+      return;
+    }
+
+    const plusCount = sim.ballSign === '+' ? totalCount : 0;
+    const minusCount = sim.ballSign === '-' ? totalCount : 0;
+    const elapsedSec = Number(sim.dropDuration.toFixed(3));
+
+    sim.precomputedRun = {
+      plusCount,
+      minusCount,
+      totalCount,
+      elapsedSec,
+      current: Number((totalCount / Math.max(elapsedSec, 0.001)).toFixed(3)),
+    };
+    sim.compileStatus = 'Tamamlandı';
+    sim.compileError = '';
+  }
+
   function renderAdminList() {
     if (!el.simulationList) return;
     if (!state.simulations.length) {
@@ -102,6 +266,7 @@
           <div>
             <p><strong>${escapeHtml(sim.name)}</strong></p>
             <small>Toplam top: ${sim.downBallCount + sim.upBallCount} • Engel: ${sim.obstacleCount} • Süre: ${sim.dropDuration}s</small>
+            <small>Durum: <span class="status ${sim.compileStatus === 'Tamamlandı' ? 'ok' : ''}">${sim.compileStatus}</span>${sim.compileError ? ` (${escapeHtml(sim.compileError)})` : ''}</small>
           </div>
           <button class="btn" data-delete-id="${sim.id}">Sil</button>
         </article>
@@ -117,7 +282,7 @@
     }
 
     el.feedButtonList.innerHTML = state.simulations
-      .map((sim) => `<button class="btn launch-btn" data-launch-id="${sim.id}">${escapeHtml(sim.name)}</button>`)
+      .map((sim) => `<button class="btn launch-btn" data-launch-id="${sim.id}" ${sim.compileStatus !== 'Tamamlandı' ? 'disabled' : ''}>${escapeHtml(sim.name)} ${sim.compileStatus !== 'Tamamlandı' ? '• Devam Ediyor' : ''}</button>`)
       .join('');
   }
 
@@ -133,113 +298,46 @@
       .join('');
   }
 
-  function buildRandomObstacles(sim, width, height, leftWallX, rightWallX) {
-    const obstacles = [];
-    const count = sim.obstacleCount;
-    const r = sim.obstacleSize;
-    const margin = Math.max(r + sim.ballSize + 12, 24);
-    const topBand = sim.upBallCount > 0 ? 72 : 20;
-    const bottomBand = sim.downBallCount > 0 ? 72 : 20;
-
-    for (let i = 0; i < count; i += 1) {
-      let tries = 0;
-      let ok = false;
-      while (!ok && tries < 80) {
-        tries += 1;
-        const x = leftWallX + margin + Math.random() * Math.max(10, (rightWallX - leftWallX - margin * 2));
-        const y = topBand + margin + Math.random() * Math.max(10, (height - topBand - bottomBand - margin * 2));
-
-        let tooClose = false;
-        for (const prev of obstacles) {
-          const dx = prev.x - x;
-          const dy = prev.y - y;
-          if (Math.hypot(dx, dy) < r * 2 + 22) {
-            tooClose = true;
-            break;
-          }
-        }
-
-        if (!tooClose) {
-          obstacles.push({ x, y, r });
-          ok = true;
-        }
-      }
-    }
-
-    return obstacles;
-  }
-
-  function createBalls(sim, width, height, leftWallX, rightWallX) {
-    const balls = [];
-    const makeBall = (dir) => {
-      const yStart = dir > 0 ? sim.ballSize + 14 : height - sim.ballSize - 14;
-      return {
-        x: leftWallX + sim.ballSize + 14 + Math.random() * (rightWallX - leftWallX - (sim.ballSize + 14) * 2),
-        y: yStart,
-        vx: (Math.random() - 0.5) * 1.2,
-        vy: dir * (1.2 + Math.random() * 0.3),
-        done: false,
-      };
-    };
-
-    for (let i = 0; i < sim.downBallCount; i += 1) balls.push(makeBall(1));
-    for (let i = 0; i < sim.upBallCount; i += 1) balls.push(makeBall(-1));
-
-    return balls;
-  }
-
   function setupEngine(sim) {
     const canvas = el.simulationCanvas;
     const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-
-    const gap = Math.min(sim.wallGap, width - 80);
-    const leftWallX = (width - gap) / 2;
-    const rightWallX = leftWallX + gap;
-
-    const engine = {
+    const layout = sim.layout;
+    return {
       sim,
+      layout,
       ctx,
-      width,
-      height,
-      leftWallX,
-      rightWallX,
-      obstacles: buildRandomObstacles(sim, width, height, leftWallX, rightWallX),
-      balls: createBalls(sim, width, height, leftWallX, rightWallX),
       running: false,
       startedAt: 0,
-      rafId: 0,
       elapsed: 0,
+      runtimeBalls: [],
     };
-
-    return engine;
   }
 
   function draw(engine) {
-    const { ctx, width, height, sim, leftWallX, rightWallX } = engine;
+    const { ctx, sim, layout } = engine;
     ctx.fillStyle = sim.backgroundColor;
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, layout.width, layout.height);
 
     ctx.fillStyle = sim.wallColor;
     const wallW = 28;
-    ctx.fillRect(leftWallX - wallW, 0, wallW, height);
-    ctx.fillRect(rightWallX, 0, wallW, height);
+    ctx.fillRect(layout.leftWallX - wallW, 0, wallW, layout.height);
+    ctx.fillRect(layout.rightWallX, 0, wallW, layout.height);
 
     ctx.fillStyle = sim.obstacleColor;
-    for (const o of engine.obstacles) {
+    for (const o of layout.obstacles) {
       ctx.beginPath();
       ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    for (const b of engine.balls) {
+    for (const b of engine.runtimeBalls) {
+      if (!b.active) continue;
       ctx.fillStyle = sim.ballColor;
       ctx.beginPath();
       ctx.arc(b.x, b.y, sim.ballSize, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#071118';
+      ctx.fillStyle = '#08111b';
       ctx.font = `${sim.ballSize + 4}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -247,57 +345,14 @@
     }
   }
 
-  function update(engine, dt) {
-    const { sim, leftWallX, rightWallX, height } = engine;
-    const radius = sim.ballSize;
-
-    for (const b of engine.balls) {
-      if (b.done) continue;
-
-      b.vy += (b.vy > 0 ? 0.005 : -0.005) * dt;
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
-
-      if (b.x - radius < leftWallX) {
-        b.x = leftWallX + radius;
-        b.vx = Math.abs(b.vx) * 0.85;
+  function updateRuntimeBalls(engine) {
+    engine.runtimeBalls = engine.sim.ballPlans.map((plan) => {
+      const pos = computeBallPosition(engine.sim, engine.layout, plan, engine.elapsed);
+      if (!pos) {
+        return { active: false, done: false, x: 0, y: 0 };
       }
-      if (b.x + radius > rightWallX) {
-        b.x = rightWallX - radius;
-        b.vx = -Math.abs(b.vx) * 0.85;
-      }
-
-      for (const o of engine.obstacles) {
-        const dx = b.x - o.x;
-        const dy = b.y - o.y;
-        const dist = Math.hypot(dx, dy) || 0.001;
-        const minDist = radius + o.r;
-        if (dist >= minDist) continue;
-
-        const nx = dx / dist;
-        const ny = dy / dist;
-        b.x = o.x + nx * minDist;
-        b.y = o.y + ny * minDist;
-
-        const vDot = b.vx * nx + b.vy * ny;
-        b.vx = (b.vx - 2 * vDot * nx) * 0.78;
-        b.vy = (b.vy - 2 * vDot * ny) * 0.78;
-        b.vx += (Math.random() - 0.5) * 0.3;
-      }
-
-      const elapsedSec = engine.elapsed / 1000;
-      const remain = Math.max(0.08, sim.dropDuration - elapsedSec);
-      if (b.vy > 0) {
-        const need = (height - radius - b.y) / remain;
-        b.vy = Math.max(b.vy, need * 0.9);
-      } else {
-        const need = (b.y - radius) / remain;
-        b.vy = Math.min(b.vy, -need * 0.9);
-      }
-
-      if (b.vy > 0 && b.y >= height - radius) b.done = true;
-      if (b.vy < 0 && b.y <= radius) b.done = true;
-    }
+      return pos;
+    });
   }
 
   function runSimulationLoop() {
@@ -305,29 +360,27 @@
     if (!engine || !engine.running) return;
 
     const now = performance.now();
-    const dt = Math.min(24, now - engine.startedAt - engine.elapsed);
     engine.elapsed = now - engine.startedAt;
-
-    update(engine, dt * 0.08);
+    updateRuntimeBalls(engine);
     draw(engine);
+
     const elapsedSec = engine.elapsed / 1000;
     el.timerDisplay.textContent = `${elapsedSec.toFixed(1)}s`;
 
-    const allDone = engine.balls.every((b) => b.done);
-    if (allDone || elapsedSec >= engine.sim.dropDuration + 0.25) {
+    const allDone = engine.runtimeBalls.length > 0 && engine.runtimeBalls.every((b) => b.done);
+    if (allDone || elapsedSec >= engine.sim.dropDuration + 0.05) {
       engine.running = false;
       finishSimulation(engine);
       return;
     }
 
-    engine.rafId = requestAnimationFrame(runSimulationLoop);
+    requestAnimationFrame(runSimulationLoop);
   }
 
   function finishSimulation(engine) {
-    const total = engine.balls.length;
-    const sign = engine.sim.ballSign;
-    const plus = sign === '+' ? total : 0;
-    const minus = sign === '-' ? total : 0;
+    const total = engine.sim.ballPlans.length;
+    const plus = engine.sim.ballSign === '+' ? total : 0;
+    const minus = engine.sim.ballSign === '-' ? total : 0;
     const elapsed = Number((engine.elapsed / 1000).toFixed(3));
 
     state.runs[engine.sim.id] = {
@@ -347,7 +400,7 @@
       el.feedButtonsView.classList.remove('hidden');
       state.engine = null;
       renderFeedButtons();
-    }, 700);
+    }, 600);
   }
 
   function showCountdown(startFn) {
@@ -368,7 +421,7 @@
 
   function openSimulation(simId) {
     const sim = state.simulations.find((x) => x.id === simId);
-    if (!sim) return;
+    if (!sim || sim.compileStatus !== 'Tamamlandı' || !sim.layout || !sim.ballPlans?.length) return;
 
     el.feedButtonsView.classList.add('hidden');
     el.simulationView.classList.remove('hidden');
@@ -378,6 +431,7 @@
     el.timerDisplay.textContent = '0.0s';
 
     state.engine = setupEngine(sim);
+    state.engine.runtimeBalls = sim.ballPlans.map(() => ({ active: false, done: false, x: 0, y: 0 }));
     draw(state.engine);
 
     el.playButton.disabled = false;
@@ -424,9 +478,17 @@
       event.preventDefault();
       const sim = createSimulationFromForm(el.simulationForm);
       if (!sim) return;
+
       state.simulations.unshift(sim);
       save();
       renderAdminList();
+
+      setTimeout(() => {
+        runPrecompute(sim);
+        save();
+        renderAdminList();
+      }, 40);
+
       el.simulationForm.reset();
       document.getElementById('wallGap').value = '760';
       document.getElementById('obstacleCount').value = '18';
@@ -449,7 +511,7 @@
     renderFeedButtons();
     el.feedButtonList.addEventListener('click', (event) => {
       const btn = event.target.closest('[data-launch-id]');
-      if (!btn) return;
+      if (!btn || btn.hasAttribute('disabled')) return;
       openSimulation(btn.getAttribute('data-launch-id'));
     });
   }

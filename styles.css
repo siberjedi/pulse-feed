@@ -217,3 +217,18 @@ input[type="color"] {
     align-items: flex-start;
   }
 }
+
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status {
+  font-weight: 700;
+  color: #ffd479;
+}
+
+.status.ok {
+  color: #73e89d;
+}
