@@ -1,6 +1,6 @@
 (() => {
-  const SIM_KEY = 'plinko.simulations.v2';
-  const RUN_KEY = 'plinko.runs.v2';
+  const SIM_KEY = 'plinko.simulations.v3';
+  const RUN_KEY = 'plinko.runs.v3';
   const page = document.body.dataset.page;
 
   const CANVAS_WIDTH = 1000;
@@ -21,6 +21,7 @@
     simulationCanvas: document.getElementById('simulationCanvas'),
     activeSimName: document.getElementById('activeSimName'),
     timerDisplay: document.getElementById('timerDisplay'),
+    arrivedDisplay: document.getElementById('arrivedDisplay'),
     playButton: document.getElementById('playButton'),
     countdownOverlay: document.getElementById('countdownOverlay'),
     statsButtonsView: document.getElementById('statsButtonsView'),
@@ -127,8 +128,9 @@
       let tries = 0;
       while (!ok && tries < 120) {
         tries += 1;
-        const x = leftWallX + margin + rand() * Math.max(10, (rightWallX - leftWallX - margin * 2));
-        const y = topBand + margin + rand() * Math.max(10, (height - topBand - bottomBand - margin * 2));
+        const x = leftWallX + margin + rand() * Math.max(10, rightWallX - leftWallX - margin * 2);
+        const y = topBand + margin + rand() * Math.max(10, height - topBand - bottomBand - margin * 2);
+
         let tooClose = false;
         for (const prev of obstacles) {
           if (Math.hypot(prev.x - x, prev.y - y) < sim.obstacleSize * 2 + 18) {
@@ -136,6 +138,7 @@
             break;
           }
         }
+
         if (!tooClose) {
           obstacles.push({ x: Number(x.toFixed(2)), y: Number(y.toFixed(2)), r: sim.obstacleSize });
           ok = true;
@@ -143,37 +146,50 @@
       }
     }
 
-    const ballPlans = [];
     const total = sim.downBallCount + sim.upBallCount;
-    const maxSpawnMs = Math.max(500, sim.dropDuration * 1000 * 0.55);
-    const spawnInterval = total <= 1 ? 0 : maxSpawnMs / (total - 1);
+    const allDirs = [
+      ...Array.from({ length: sim.downBallCount }, () => 1),
+      ...Array.from({ length: sim.upBallCount }, () => -1),
+    ];
 
-    const makePlan = (dir, idx) => {
-      const spawnMs = Math.round(idx * spawnInterval);
-      const xPad = sim.ballSize + 18;
-      const startX = leftWallX + xPad + rand() * (rightWallX - leftWallX - xPad * 2);
-      const endOffset = (rand() - 0.5) * 34;
+    const totalMs = sim.dropDuration * 1000;
+    const earliestArrival = Math.max(700, totalMs * 0.22);
+    const latestArrival = Math.max(earliestArrival + 120, totalMs * 0.96);
+    const nominalStep = total <= 1 ? 0 : (latestArrival - earliestArrival) / (total - 1);
+
+    const ballPlans = [];
+    let prevArrival = 0;
+
+    for (let i = 0; i < allDirs.length; i += 1) {
+      const remaining = allDirs.length - i - 1;
+      const minArrival = i === 0 ? earliestArrival : prevArrival + 70;
+      const maxArrival = latestArrival - remaining * 70;
+      const baseArrival = earliestArrival + nominalStep * i;
+      const jitter = nominalStep > 0 ? (rand() - 0.5) * nominalStep * 0.55 : 0;
+      const arrivalMs = Math.max(minArrival, Math.min(maxArrival, baseArrival + jitter));
+      prevArrival = arrivalMs;
+
+      const maxTravel = Math.max(420, Math.min(arrivalMs - 100, totalMs * 0.75));
+      const minTravel = Math.min(maxTravel, Math.max(320, totalMs * 0.2));
+      const travelMs = minTravel + (maxTravel - minTravel) * rand();
+      const spawnMs = Math.max(0, arrivalMs - travelMs);
+
+      const pad = sim.ballSize + 18;
+      const startX = leftWallX + pad + rand() * (rightWallX - leftWallX - pad * 2);
+
       ballPlans.push({
         id: uid(),
-        dir,
-        spawnMs,
+        dir: allDirs[i],
+        spawnMs: Number(spawnMs.toFixed(2)),
+        arrivalMs: Number(arrivalMs.toFixed(2)),
+        travelMs: Number(travelMs.toFixed(2)),
         startX: Number(startX.toFixed(2)),
-        endOffset: Number(endOffset.toFixed(2)),
+        endOffset: Number(((rand() - 0.5) * 34).toFixed(2)),
         amp1: Number((16 + rand() * 40).toFixed(2)),
         amp2: Number((6 + rand() * 22).toFixed(2)),
         phase1: Number((rand() * Math.PI * 2).toFixed(4)),
         phase2: Number((rand() * Math.PI * 2).toFixed(4)),
       });
-    };
-
-    let index = 0;
-    for (let i = 0; i < sim.downBallCount; i += 1) {
-      makePlan(1, index);
-      index += 1;
-    }
-    for (let i = 0; i < sim.upBallCount; i += 1) {
-      makePlan(-1, index);
-      index += 1;
     }
 
     return {
@@ -182,12 +198,13 @@
     };
   }
 
-  function computeBallPosition(sim, layout, plan, elapsedMs) {
-    if (elapsedMs < plan.spawnMs) return null;
+  function computeBallState(sim, layout, plan, elapsedMs) {
+    if (elapsedMs < plan.spawnMs) {
+      return { active: false, done: false, x: 0, y: 0 };
+    }
 
     const radius = sim.ballSize;
-    const travelMs = Math.max(300, sim.dropDuration * 1000 - plan.spawnMs);
-    const localT = Math.min(1, (elapsedMs - plan.spawnMs) / travelMs);
+    const localT = Math.min(1, (elapsedMs - plan.spawnMs) / Math.max(plan.travelMs, 120));
 
     const startY = plan.dir > 0 ? radius + 14 : layout.height - radius - 14;
     const endY = plan.dir > 0 ? layout.height - radius : radius;
@@ -213,10 +230,10 @@
     x = Math.max(minX, Math.min(maxX, x));
 
     return {
+      active: localT < 1,
+      done: localT >= 1,
       x,
       y,
-      done: localT >= 1,
-      active: true,
     };
   }
 
@@ -227,8 +244,8 @@
 
     const finalElapsed = sim.dropDuration * 1000;
     const doneCount = sim.ballPlans.reduce((acc, plan) => {
-      const pos = computeBallPosition(sim, sim.layout, plan, finalElapsed);
-      return acc + (pos && pos.done ? 1 : 0);
+      const info = computeBallState(sim, sim.layout, plan, finalElapsed);
+      return acc + (info.done ? 1 : 0);
     }, 0);
 
     const totalCount = sim.ballPlans.length;
@@ -301,15 +318,15 @@
   function setupEngine(sim) {
     const canvas = el.simulationCanvas;
     const ctx = canvas.getContext('2d');
-    const layout = sim.layout;
     return {
       sim,
-      layout,
+      layout: sim.layout,
       ctx,
       running: false,
       startedAt: 0,
       elapsed: 0,
       runtimeBalls: [],
+      doneCount: 0,
     };
   }
 
@@ -346,13 +363,8 @@
   }
 
   function updateRuntimeBalls(engine) {
-    engine.runtimeBalls = engine.sim.ballPlans.map((plan) => {
-      const pos = computeBallPosition(engine.sim, engine.layout, plan, engine.elapsed);
-      if (!pos) {
-        return { active: false, done: false, x: 0, y: 0 };
-      }
-      return pos;
-    });
+    engine.runtimeBalls = engine.sim.ballPlans.map((plan) => computeBallState(engine.sim, engine.layout, plan, engine.elapsed));
+    engine.doneCount = engine.runtimeBalls.reduce((acc, b) => acc + (b.done ? 1 : 0), 0);
   }
 
   function runSimulationLoop() {
@@ -361,14 +373,19 @@
 
     const now = performance.now();
     engine.elapsed = now - engine.startedAt;
+
     updateRuntimeBalls(engine);
     draw(engine);
 
     const elapsedSec = engine.elapsed / 1000;
     el.timerDisplay.textContent = `${elapsedSec.toFixed(1)}s`;
+    if (el.arrivedDisplay) {
+      el.arrivedDisplay.textContent = `Geçen top: ${engine.doneCount}/${engine.sim.ballPlans.length}`;
+    }
 
-    const allDone = engine.runtimeBalls.length > 0 && engine.runtimeBalls.every((b) => b.done);
-    if (allDone || elapsedSec >= engine.sim.dropDuration + 0.05) {
+    const reachedDuration = elapsedSec >= engine.sim.dropDuration;
+    const allDone = engine.doneCount === engine.sim.ballPlans.length;
+    if (reachedDuration && allDone) {
       engine.running = false;
       finishSimulation(engine);
       return;
@@ -429,6 +446,7 @@
     el.timerDisplay.style.color = sim.timerColor;
     el.timerDisplay.style.fontSize = `${sim.timerSize}px`;
     el.timerDisplay.textContent = '0.0s';
+    if (el.arrivedDisplay) el.arrivedDisplay.textContent = `Geçen top: 0/${sim.ballPlans.length}`;
 
     state.engine = setupEngine(sim);
     state.engine.runtimeBalls = sim.ballPlans.map(() => ({ active: false, done: false, x: 0, y: 0 }));
