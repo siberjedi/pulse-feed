@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simülasyon İstatistikleri</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-page="stats">
+  <main class="app">
+    <header class="page-header">
+      <h1>Simülasyon Stats</h1>
+      <nav class="top-nav">
+        <a href="admin.html">Admin</a>
+        <a href="feed.html">Feed</a>
+        <a class="active" href="stats.html">Stats</a>
+      </nav>
+    </header>
+
+    <section id="statsButtonsView" class="card">
+      <h2>Simülasyon Sonuçları</h2>
+      <div id="statsButtonList" class="button-grid"></div>
+    </section>
+
+    <section id="statsDetailView" class="card hidden">
+      <div id="statsDetail" class="stats-detail"></div>
+      <button id="statsBackButton" class="btn">← Geri dön</button>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

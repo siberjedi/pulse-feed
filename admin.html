@@ -1,125 +1,121 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse Admin</title>
+  <title>Simülasyon Admin</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body data-page="admin">
-  <div class="layout">
-    <aside class="sidebar left-sidebar" aria-label="Navigation">
-      <div class="left-brand">
-        <img src="PulseWhite.svg" alt="Pulse logo" class="left-brand-logo" />
-        <h2>Pulse</h2>
-      </div>
-
-      <nav class="menu" aria-label="Main menu">
-        <a href="feed.html">Anasayfa</a>
-        <a href="feed.html">Keşfet</a>
-        <a href="feed.html">Bildirimler</a>
-        <a href="feed.html">Mesajlar</a>
-        <a href="feed.html">Premium $</a>
+  <main class="app">
+    <header class="page-header">
+      <h1>Plinko Simülasyon Yöneticisi</h1>
+      <nav class="top-nav">
+        <a class="active" href="admin.html">Admin</a>
+        <a href="feed.html">Feed</a>
+        <a href="stats.html">Stats</a>
       </nav>
-    </aside>
+    </header>
 
-    <main class="app-shell">
-      <header class="top-bar">
-        <div class="brand">
-          <img src="PulseWhite.svg" alt="Pulse logo" class="brand-logo" />
-          <h1>Pulse</h1>
-        </div>
-        <div class="mode-switch" role="tablist" aria-label="Mode switch">
-          <a href="admin.html" class="tab-btn active">Composer / Admin</a>
-          <a href="feed.html" class="tab-btn">Feed</a>
-        </div>
-      </header>
+    <section class="card">
+      <h2>Yeni Simülasyon</h2>
+      <form id="simulationForm" class="group-form">
+        <fieldset class="form-section">
+          <legend>1) Simülasyon adı</legend>
+          <div class="section-grid one-col">
+            <label>Simülasyon adı
+              <input id="simName" type="text" required placeholder="Örn: Test #1" />
+            </label>
+          </div>
+        </fieldset>
 
-      <section class="panel" aria-label="Composer and admin mode">
-        <h2>Create content</h2>
-        <form id="composerForm" class="composer-form">
-          <label>
-            Post text
-            <textarea id="postText" rows="4" placeholder="Write a post or comment..." required></textarea>
-          </label>
+        <fieldset class="form-section">
+          <legend>2) Duvar ve engel ayarları</legend>
+          <div class="section-grid">
+            <label>Arkaplan rengi
+              <input id="backgroundColor" type="color" value="#6c6875" />
+            </label>
+            <label>Duvar aralığı (px)
+              <input id="wallGap" type="number" min="240" max="1000" value="760" />
+            </label>
+            <label>Duvar rengi
+              <input id="wallColor" type="color" value="#c70000" />
+            </label>
+            <label>Engel boyutu (yarıçap px)
+              <input id="obstacleSize" type="number" min="6" max="40" value="24" />
+            </label>
+            <label>Engel sayısı
+              <input id="obstacleCount" type="number" min="4" max="120" value="18" />
+            </label>
+            <label>Engel rengi
+              <input id="obstacleColor" type="color" value="#0b0b0b" />
+            </label>
+          </div>
+        </fieldset>
 
-          <div class="form-row">
-            <label>
-              Post type
-              <select id="postType">
-                <option value="post">Post</option>
-                <option value="comment">Comment</option>
+        <fieldset class="form-section">
+          <legend>3) Yukarı top ayarları</legend>
+          <div class="section-grid">
+            <label>Top boyutu (yarıçap px)
+              <input id="ballSize" type="number" min="6" max="30" value="18" />
+            </label>
+            <label>Yukarı giden top sayısı
+              <input id="upBallCount" type="number" min="0" max="200" value="0" />
+            </label>
+            <label>Yukarı giden top rengi
+              <input id="upBallColor" type="color" value="#ffd166" />
+            </label>
+            <label>Yukarı giden top işareti
+              <select id="upBallSign">
+                <option value="+">+</option>
+                <option value="-">-</option>
               </select>
             </label>
+          </div>
+        </fieldset>
 
-            <label>
-              Parent post (for comments)
-              <select id="parentPostSelect">
-                <option value="">None</option>
+        <fieldset class="form-section">
+          <legend>4) Aşağı top ayarları</legend>
+          <div class="section-grid">
+            <label>Aşağı giden top sayısı
+              <input id="downBallCount" type="number" min="0" max="200" value="8" />
+            </label>
+            <label>Aşağı giden top rengi
+              <input id="downBallColor" type="color" value="#21d7e6" />
+            </label>
+            <label>Aşağı giden top işareti
+              <select id="downBallSign">
+                <option value="+">+</option>
+                <option value="-">-</option>
               </select>
             </label>
           </div>
+        </fieldset>
 
-          <div class="form-row">
-            <label>
-              Image / GIF / video thumbnail
-              <input id="mediaFile" type="file" accept="image/*,video/*" />
+        <fieldset class="form-section">
+          <legend>5) Süre ayarları</legend>
+          <div class="section-grid">
+            <label>Düşme / geçiş süresi (sn)
+              <input id="dropDuration" type="number" min="3" max="180" value="14" />
             </label>
-
-            <label class="checkbox-line">
-              <input id="isSponsored" type="checkbox" />
-              Mark as Sponsored
+            <label>Timer rengi
+              <input id="timerColor" type="color" value="#ffffff" />
             </label>
-          </div>
-
-          <div class="form-row">
-            <label>
-              Author handle
-              <input id="authorHandle" type="text" value="@studio.pulse" />
-            </label>
-
-            <label>
-              Header line
-              <input id="authorSubMeta" type="text" value="music video draft" />
+            <label>Timer yazı boyutu (px)
+              <input id="timerSize" type="number" min="16" max="80" value="28" />
             </label>
           </div>
+        </fieldset>
 
-          <button class="publish-btn" type="submit">Publish</button>
-        </form>
+        <button type="submit" class="btn primary">Simülasyonu Kaydet</button>
+      </form>
+    </section>
 
-        <section class="manager" aria-label="Content manager">
-          <h2>Manage posts & comments</h2>
-          <div id="manageList" class="manage-list"></div>
-        </section>
-
-        <section class="manager" aria-label="Suggestion manager">
-          <h2>Manage follow suggestions</h2>
-          <form id="suggestionForm" class="composer-form compact">
-            <div class="form-row">
-              <label>
-                Handle
-                <input id="suggestionHandle" type="text" placeholder="@new.creator" required />
-              </label>
-              <label>
-                Bio
-                <input id="suggestionBio" type="text" placeholder="short bio" required />
-              </label>
-            </div>
-            <button class="publish-btn" type="submit">Add suggestion</button>
-          </form>
-          <div id="suggestionManageList" class="manage-list"></div>
-        </section>
-      </section>
-    </main>
-
-    <aside class="sidebar right-sidebar" aria-label="Discover and follow">
-      <input id="searchInput" type="text" placeholder="Ara..." class="search-input" />
-      <section class="suggestions">
-        <h3>Takip önerileri</h3>
-        <div id="suggestionsList"></div>
-      </section>
-    </aside>
-  </div>
+    <section class="card">
+      <h2>Kayıtlı Simülasyonlar</h2>
+      <div id="simulationList" class="stack"></div>
+    </section>
+  </main>
 
   <script src="script.js"></script>
 </body>

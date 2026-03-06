@@ -1,45 +1,50 @@
 (() => {
-  const POSTS_KEY = 'pulseFeedPosts.v4';
-  const SUGGESTIONS_KEY = 'pulseSuggestions.v1';
+  const SIM_KEY = 'plinko.simulations.v4';
+  const RUN_KEY = 'plinko.runs.v4';
+  const page = document.body.dataset.page;
 
-  const page = document.body.dataset.page || 'admin';
+  const CANVAS_WIDTH = 1000;
+  const CANVAS_HEIGHT = 620;
 
   const state = {
-    posts: [],
-    suggestions: [],
-    autoScroll: true,
-    pauseAtPosts: true,
-    speedPxPerSecond: 34,
-    isPaused: false,
-    pauseUntil: 0,
-    lastTime: performance.now(),
-    loopResetPending: false,
+    simulations: load(SIM_KEY, []),
+    runs: load(RUN_KEY, {}),
+    engine: null,
   };
 
   const el = {
-    form: document.getElementById('composerForm'),
-    postText: document.getElementById('postText'),
-    postType: document.getElementById('postType'),
-    parentPostSelect: document.getElementById('parentPostSelect'),
-    mediaFile: document.getElementById('mediaFile'),
-    isSponsored: document.getElementById('isSponsored'),
-    authorHandle: document.getElementById('authorHandle'),
-    authorSubMeta: document.getElementById('authorSubMeta'),
-    feed: document.getElementById('feed'),
-    manageList: document.getElementById('manageList'),
-    suggestionForm: document.getElementById('suggestionForm'),
-    suggestionHandle: document.getElementById('suggestionHandle'),
-    suggestionBio: document.getElementById('suggestionBio'),
-    suggestionManageList: document.getElementById('suggestionManageList'),
-    suggestionsList: document.getElementById('suggestionsList'),
-    searchInput: document.getElementById('searchInput'),
-    autoScrollEnabled: document.getElementById('autoScrollEnabled'),
-    scrollSpeed: document.getElementById('scrollSpeed'),
-    pauseAtPosts: document.getElementById('pauseAtPosts'),
+    simulationForm: document.getElementById('simulationForm'),
+    simulationList: document.getElementById('simulationList'),
+    feedButtonsView: document.getElementById('feedButtonsView'),
+    feedButtonList: document.getElementById('feedButtonList'),
+    simulationView: document.getElementById('simulationView'),
+    simulationCanvas: document.getElementById('simulationCanvas'),
+    activeSimName: document.getElementById('activeSimName'),
+    timerDisplay: document.getElementById('timerDisplay'),
+    playButton: document.getElementById('playButton'),
+    countdownOverlay: document.getElementById('countdownOverlay'),
+    statsButtonsView: document.getElementById('statsButtonsView'),
+    statsButtonList: document.getElementById('statsButtonList'),
+    statsDetailView: document.getElementById('statsDetailView'),
+    statsDetail: document.getElementById('statsDetail'),
+    statsBackButton: document.getElementById('statsBackButton'),
   };
 
+  function load(key, fallback) {
+    try {
+      return JSON.parse(localStorage.getItem(key) || 'null') || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function save() {
+    localStorage.setItem(SIM_KEY, JSON.stringify(state.simulations));
+    localStorage.setItem(RUN_KEY, JSON.stringify(state.runs));
+  }
+
   function uid() {
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   }
 
   function escapeHtml(str) {
@@ -51,413 +56,515 @@
       .replace(/'/g, '&#39;');
   }
 
-  function formatTextWithMentions(text) {
-    const safe = escapeHtml(text);
-    return safe.replace(/(^|\s)(@[a-zA-Z0-9_.-]+)/g, '$1<span class="mention">$2</span>');
+  function seeded(seed) {
+    let t = seed >>> 0;
+    return () => {
+      t += 0x6d2b79f5;
+      let x = Math.imul(t ^ (t >>> 15), 1 | t);
+      x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
-  function timeAgo(ts) {
-    const diffMin = Math.max(1, Math.floor((Date.now() - ts) / 60000));
-    if (diffMin < 60) return `${diffMin}m`;
-    const h = Math.floor(diffMin / 60);
-    if (h < 24) return `${h}h`;
-    return `${Math.floor(h / 24)}d`;
-  }
-
-  function avatarFor(author) {
-    const seed = encodeURIComponent(String(author).replace('@', ''));
-    return `https://api.dicebear.com/9.x/thumbs/svg?seed=${seed}`;
-  }
-
-  function seedPosts() {
-    const now = Date.now();
-    const p1 = uid();
-    const p2 = uid();
-    return [
-      {
-        id: p1,
-        type: 'post',
-        author: '@nova.wave',
-        subMeta: 'visual rehearsal',
-        text: 'Yeni editte @mono.synth ile ortak deneme yaptık. Gece çekimi için hazır.',
-        sponsored: false,
-        media: '',
-        createdAt: now - 1000 * 60 * 12,
-        pauseMs: 2400,
-        parentId: null,
-      },
-      {
-        id: p2,
-        type: 'post',
-        author: '@arc.light',
-        subMeta: 'loop tools',
-        text: 'Bu bir tanıtım gönderisidir. @studio.pulse için yeni görsel paket çıktı.',
-        sponsored: true,
-        media: '',
-        createdAt: now - 1000 * 60 * 10,
-        pauseMs: 2800,
-        parentId: null,
-      },
-      {
-        id: uid(),
-        type: 'comment',
-        author: '@grainframe',
-        subMeta: 'studio notes',
-        text: '@nova.wave palet çok iyi duruyor.',
-        sponsored: false,
-        media: '',
-        createdAt: now - 1000 * 60 * 8,
-        pauseMs: 0,
-        parentId: p1,
-      },
-    ];
-  }
-
-  function seedSuggestions() {
-    return [
-      { id: uid(), handle: '@blue.artist', bio: 'visual performer' },
-      { id: uid(), handle: '@ghost.user', bio: 'night cuts' },
-      { id: uid(), handle: '@mono.synth', bio: 'audio textures' },
-    ];
-  }
-
-  function loadData() {
-    try {
-      state.posts = JSON.parse(localStorage.getItem(POSTS_KEY) || 'null') || seedPosts();
-    } catch {
-      state.posts = seedPosts();
+  function getDirectionStyle(sim, dir) {
+    if (dir > 0) {
+      return {
+        color: sim.downBallColor || '#21d7e6',
+        sign: sim.downBallSign || '+',
+      };
     }
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
+    return {
+      color: sim.upBallColor || '#ffd166',
+      sign: sim.upBallSign || '-',
+    };
+  }
 
-    try {
-      state.suggestions = JSON.parse(localStorage.getItem(SUGGESTIONS_KEY) || 'null') || seedSuggestions();
-    } catch {
-      state.suggestions = seedSuggestions();
+
+
+  function getSignColor(sim, sign) {
+    if (sim.downBallSign === sign && sim.downBallCount > 0) return sim.downBallColor || '#21d7e6';
+    if (sim.upBallSign === sign && sim.upBallCount > 0) return sim.upBallColor || '#ffd166';
+    if (sign === '+') return '#7ee7ff';
+    return '#ffd166';
+  }
+
+  function computeSignTotals(sim) {
+    let plus = 0;
+    let minus = 0;
+    for (const plan of sim.ballPlans || []) {
+      const style = getDirectionStyle(sim, plan.dir);
+      if (style.sign === '+') plus += 1;
+      if (style.sign === '-') minus += 1;
     }
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
+    return { plus, minus };
   }
 
-  function persistPosts() {
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
-  }
-
-  function persistSuggestions() {
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
-  }
-
-  function getPosts() {
-    return state.posts.filter((x) => x.type === 'post').sort((a, b) => a.createdAt - b.createdAt);
-  }
-
-  function getCommentsFor(postId) {
-    return state.posts.filter((x) => x.type === 'comment' && x.parentId === postId).sort((a, b) => a.createdAt - b.createdAt);
-  }
-
-  function renderParentOptions() {
-    if (!el.parentPostSelect) return;
-    const options = ['<option value="">None</option>'];
-    for (const post of getPosts()) {
-      const text = escapeHtml(post.text.slice(0, 40));
-      options.push(`<option value="${post.id}">${escapeHtml(post.author)} — ${text}${post.text.length > 40 ? '…' : ''}</option>`);
-    }
-    el.parentPostSelect.innerHTML = options.join('');
-  }
-
-  function renderFeed() {
-    if (!el.feed) return;
-    const posts = getPosts();
-    if (!posts.length) {
-      el.feed.innerHTML = '<div class="empty-feed">No posts yet.</div>';
-      return;
-    }
-
-    el.feed.innerHTML = posts
-      .map((post) => {
-        const comments = getCommentsFor(post.id);
-        const media = post.media ? `<div class="media-wrap"><img class="media" src="${post.media}" alt="Attached media" /></div>` : '';
-        const commentsHtml = comments.length
-          ? `<section class="comments">${comments
-              .map((c) => `<p class="comment"><strong>${escapeHtml(c.author)}</strong> · <span class="timestamp">${timeAgo(c.createdAt)}</span><br>${formatTextWithMentions(c.text)}</p>`)
-              .join('')}</section>`
-          : '<section class="comments"></section>';
-
-        return `<article class="post-card" data-pause="${post.pauseMs || 0}">
-          <header class="post-head">
-            <img class="avatar" src="${avatarFor(post.author)}" alt="${escapeHtml(post.author)} avatar" />
-            <div>
-              <p class="meta-row"><span class="username">${escapeHtml(post.author)}</span> <span class="timestamp">· ${timeAgo(post.createdAt)}</span></p>
-              <p class="sub-meta">${escapeHtml(post.subMeta || 'music video drafts')}</p>
-            </div>
-            ${post.sponsored ? '<span class="sponsored-label">Sponsored</span>' : ''}
-          </header>
-          <p class="post-text">${formatTextWithMentions(post.text)}</p>
-          ${media}
-          <footer class="post-actions" aria-hidden="true">
-            <span>♡ ${Math.floor(Math.random() * 900 + 25)}</span>
-            <span>💬 ${comments.length}</span>
-            <span>↺ ${Math.floor(Math.random() * 70 + 3)}</span>
-          </footer>
-          ${commentsHtml}
-        </article>`;
-      })
-      .join('');
-  }
-
-  function renderManageList() {
-    if (!el.manageList) return;
-    const sorted = [...state.posts].sort((a, b) => b.createdAt - a.createdAt);
-    el.manageList.innerHTML = sorted
-      .map((item) => `<div class="manage-item">
-        <div>
-          <p><strong>${escapeHtml(item.author)}</strong> · <span>${item.type.toUpperCase()}</span> · <small>${timeAgo(item.createdAt)}</small></p>
-          <small>${escapeHtml(item.text.slice(0, 80))}${item.text.length > 80 ? '…' : ''}</small>
-        </div>
-        <button class="delete-btn" type="button" data-delete-post-id="${item.id}">Delete</button>
-      </div>`)
-      .join('');
-  }
-
-  function renderSuggestions() {
-    if (!el.suggestionsList) return;
-    const query = (el.searchInput?.value || '').trim().toLowerCase();
-    const list = state.suggestions.filter((s) =>
-      !query || s.handle.toLowerCase().includes(query) || s.bio.toLowerCase().includes(query)
-    );
-
-    el.suggestionsList.innerHTML = list
-      .map((s) => `<article class="suggestion-item">
-        <img src="${avatarFor(s.handle)}" alt="${escapeHtml(s.handle)} avatar" class="avatar mini" />
-        <div>
-          <p><strong>${escapeHtml(s.handle)}</strong></p>
-          <small>${escapeHtml(s.bio)}</small>
-        </div>
-        <button type="button">Takip et</button>
-      </article>`)
-      .join('');
-  }
-
-  function renderSuggestionManager() {
-    if (!el.suggestionManageList) return;
-    el.suggestionManageList.innerHTML = state.suggestions
-      .map((s) => `<div class="manage-item">
-        <div>
-          <p><strong>${escapeHtml(s.handle)}</strong></p>
-          <small>${escapeHtml(s.bio)}</small>
-        </div>
-        <button class="delete-btn" type="button" data-delete-suggestion-id="${s.id}">Delete</button>
-      </div>`)
-      .join('');
-  }
-
-  function refresh() {
-    renderParentOptions();
-    renderFeed();
-    renderManageList();
-    renderSuggestions();
-    renderSuggestionManager();
-  }
-
-  function toDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      if (!file) {
-        resolve('');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function onPublish(event) {
-    event.preventDefault();
-    const text = el.postText.value.trim();
-    if (!text) return;
-
-    const type = el.postType.value;
-    const parentId = type === 'comment' ? el.parentPostSelect.value || null : null;
-    if (type === 'comment' && !parentId) {
-      alert('Please select a parent post for comments.');
-      return;
-    }
-
-    const media = await toDataUrl(el.mediaFile.files?.[0] || null);
-
-    state.posts.push({
+  function createSimulationFromForm(form) {
+    const fd = new FormData(form);
+    const getNum = (id) => Number(fd.get(id));
+    const sim = {
       id: uid(),
-      type,
-      author: (el.authorHandle.value.trim() || '@studio.pulse').replace(/\s+/g, ''),
-      subMeta: el.authorSubMeta.value.trim() || 'music video draft',
-      text,
-      sponsored: Boolean(el.isSponsored.checked),
-      media,
+      name: String(fd.get('simName') || '').trim(),
+      backgroundColor: String(fd.get('backgroundColor') || '#6c6875'),
+      wallGap: getNum('wallGap'),
+      wallColor: String(fd.get('wallColor') || '#c70000'),
+      obstacleSize: getNum('obstacleSize'),
+      obstacleCount: getNum('obstacleCount'),
+      obstacleColor: String(fd.get('obstacleColor') || '#0b0b0b'),
+      ballSize: getNum('ballSize'),
+      downBallColor: String(fd.get('downBallColor') || '#21d7e6'),
+      downBallSign: String(fd.get('downBallSign') || '+'),
+      downBallCount: getNum('downBallCount'),
+      upBallColor: String(fd.get('upBallColor') || '#ffd166'),
+      upBallSign: String(fd.get('upBallSign') || '-'),
+      upBallCount: getNum('upBallCount'),
+      dropDuration: getNum('dropDuration'),
+      timerColor: String(fd.get('timerColor') || '#ffffff'),
+      timerSize: getNum('timerSize'),
       createdAt: Date.now(),
-      pauseMs: type === 'post' ? 2200 : 0,
-      parentId,
-    });
+      compileStatus: 'Devam Ediyor',
+      compileError: '',
+      layout: null,
+      ballPlans: [],
+      precomputedRun: null,
+    };
 
-    persistPosts();
-    refresh();
-
-    el.form.reset();
-    el.authorHandle.value = '@studio.pulse';
-    el.authorSubMeta.value = 'music video draft';
-  }
-
-  function deletePostOrComment(id) {
-    const item = state.posts.find((x) => x.id === id);
-    if (!item) return;
-
-    if (item.type === 'post') {
-      state.posts = state.posts.filter((x) => x.id !== id && x.parentId !== id);
-    } else {
-      state.posts = state.posts.filter((x) => x.id !== id);
+    if (!sim.name) {
+      alert('Simülasyon adı zorunlu.');
+      return null;
     }
-
-    persistPosts();
-    refresh();
+    if (sim.downBallCount + sim.upBallCount < 1) {
+      alert('En az 1 top olmalı.');
+      return null;
+    }
+    return sim;
   }
 
-  function onAddSuggestion(event) {
-    event.preventDefault();
-    const handle = el.suggestionHandle.value.trim();
-    const bio = el.suggestionBio.value.trim();
-    if (!handle || !bio) return;
+  function buildLayoutAndPlans(sim) {
+    const seedNumber = Number(String(sim.createdAt).slice(-9)) ^ sim.name.length;
+    const rand = seeded(seedNumber);
 
-    const normalized = handle.startsWith('@') ? handle : `@${handle}`;
-    state.suggestions.unshift({ id: uid(), handle: normalized, bio });
-    persistSuggestions();
-    renderSuggestions();
-    renderSuggestionManager();
-    el.suggestionForm.reset();
-  }
+    const width = CANVAS_WIDTH;
+    const height = CANVAS_HEIGHT;
+    const gap = Math.min(sim.wallGap, width - 80);
+    const leftWallX = (width - gap) / 2;
+    const rightWallX = leftWallX + gap;
 
-  function deleteSuggestion(id) {
-    state.suggestions = state.suggestions.filter((x) => x.id !== id);
-    persistSuggestions();
-    renderSuggestions();
-    renderSuggestionManager();
-  }
+    const obstacles = [];
+    const margin = Math.max(sim.obstacleSize + sim.ballSize + 12, 26);
+    const topBand = sim.upBallCount > 0 ? 78 : 20;
+    const bottomBand = sim.downBallCount > 0 ? 78 : 20;
 
-  function maybePauseAtPost(now) {
-    if (!state.pauseAtPosts || page !== 'feed') return;
-
-    const cards = Array.from(document.querySelectorAll('.post-card'));
-    for (const card of cards) {
-      if (card.dataset.paused === '1') continue;
-      const pauseMs = Number(card.dataset.pause || 0);
-      if (!pauseMs) continue;
-      const rect = card.getBoundingClientRect();
-      if (rect.top >= 70 && rect.top <= 160) {
-        card.dataset.paused = '1';
-        state.isPaused = true;
-        state.pauseUntil = now + pauseMs;
-        break;
+    for (let i = 0; i < sim.obstacleCount; i += 1) {
+      let ok = false;
+      let tries = 0;
+      while (!ok && tries < 120) {
+        tries += 1;
+        const x = leftWallX + margin + rand() * Math.max(10, rightWallX - leftWallX - margin * 2);
+        const y = topBand + margin + rand() * Math.max(10, height - topBand - bottomBand - margin * 2);
+        let tooClose = false;
+        for (const prev of obstacles) {
+          if (Math.hypot(prev.x - x, prev.y - y) < sim.obstacleSize * 2 + 18) {
+            tooClose = true;
+            break;
+          }
+        }
+        if (!tooClose) {
+          obstacles.push({ x: Number(x.toFixed(2)), y: Number(y.toFixed(2)), r: sim.obstacleSize });
+          ok = true;
+        }
       }
     }
+
+    const total = sim.downBallCount + sim.upBallCount;
+    const allDirs = [
+      ...Array.from({ length: sim.downBallCount }, () => 1),
+      ...Array.from({ length: sim.upBallCount }, () => -1),
+    ];
+
+    const totalMs = sim.dropDuration * 1000;
+    const earliestArrival = Math.max(700, totalMs * 0.22);
+    const latestArrival = Math.max(earliestArrival + 120, totalMs * 0.96);
+    const nominalStep = total <= 1 ? 0 : (latestArrival - earliestArrival) / (total - 1);
+
+    const ballPlans = [];
+    let prevArrival = 0;
+
+    for (let i = 0; i < allDirs.length; i += 1) {
+      const remaining = allDirs.length - i - 1;
+      const minArrival = i === 0 ? earliestArrival : prevArrival + 70;
+      const maxArrival = latestArrival - remaining * 70;
+      const baseArrival = earliestArrival + nominalStep * i;
+      const jitter = nominalStep > 0 ? (rand() - 0.5) * nominalStep * 0.55 : 0;
+      const arrivalMs = Math.max(minArrival, Math.min(maxArrival, baseArrival + jitter));
+      prevArrival = arrivalMs;
+
+      const maxTravel = Math.max(420, Math.min(arrivalMs - 100, totalMs * 0.75));
+      const minTravel = Math.min(maxTravel, Math.max(320, totalMs * 0.2));
+      const travelMs = minTravel + (maxTravel - minTravel) * rand();
+      const spawnMs = Math.max(0, arrivalMs - travelMs);
+
+      const pad = sim.ballSize + 18;
+      const startX = leftWallX + pad + rand() * (rightWallX - leftWallX - pad * 2);
+
+      ballPlans.push({
+        id: uid(),
+        dir: allDirs[i],
+        spawnMs: Number(spawnMs.toFixed(2)),
+        arrivalMs: Number(arrivalMs.toFixed(2)),
+        travelMs: Number(travelMs.toFixed(2)),
+        startX: Number(startX.toFixed(2)),
+        endOffset: Number(((rand() - 0.5) * 34).toFixed(2)),
+        amp1: Number((16 + rand() * 40).toFixed(2)),
+        amp2: Number((6 + rand() * 22).toFixed(2)),
+        phase1: Number((rand() * Math.PI * 2).toFixed(4)),
+        phase2: Number((rand() * Math.PI * 2).toFixed(4)),
+      });
+    }
+
+    return { layout: { width, height, leftWallX, rightWallX, obstacles }, ballPlans };
   }
 
-  function maybeResetLoop() {
-    if (state.loopResetPending || page !== 'feed') return;
-    const nearEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
-    if (!nearEnd) return;
+  function computeBallState(sim, layout, plan, elapsedMs) {
+    if (elapsedMs < plan.spawnMs) return { active: false, done: false, x: 0, y: 0, dir: plan.dir };
 
-    state.loopResetPending = true;
-    window.setTimeout(() => {
-      document.querySelectorAll('.post-card').forEach((card) => delete card.dataset.paused);
-      window.scrollTo({ top: 0, behavior: 'auto' });
-      state.loopResetPending = false;
-    }, 900);
+    const radius = sim.ballSize;
+    const localT = Math.min(1, (elapsedMs - plan.spawnMs) / Math.max(plan.travelMs, 120));
+    const startY = plan.dir > 0 ? radius + 14 : layout.height - radius - 14;
+    const endY = plan.dir > 0 ? layout.height - radius : radius;
+    const y = startY + (endY - startY) * localT;
+
+    let x = plan.startX + plan.endOffset * localT;
+    x += Math.sin(localT * Math.PI * 2.8 + plan.phase1) * plan.amp1;
+    x += Math.sin(localT * Math.PI * 7.4 + plan.phase2) * plan.amp2;
+
+    for (const o of layout.obstacles) {
+      const dx = x - o.x;
+      const dy = y - o.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const influence = sim.ballSize + o.r + 22;
+      if (dist < influence) {
+        const push = (influence - dist) * 0.9;
+        x += (dx / dist) * push;
+      }
+    }
+
+    const minX = layout.leftWallX + radius;
+    const maxX = layout.rightWallX - radius;
+    x = Math.max(minX, Math.min(maxX, x));
+
+    return { active: localT < 1, done: localT >= 1, x, y, dir: plan.dir };
   }
 
-  function tick(now) {
-    if (page !== 'feed' || !state.autoScroll) {
-      state.lastTime = now;
-      requestAnimationFrame(tick);
+  function runPrecompute(sim) {
+    const built = buildLayoutAndPlans(sim);
+    sim.layout = built.layout;
+    sim.ballPlans = built.ballPlans;
+
+    const finalElapsed = sim.dropDuration * 1000;
+    const doneCount = sim.ballPlans.reduce((acc, plan) => acc + (computeBallState(sim, sim.layout, plan, finalElapsed).done ? 1 : 0), 0);
+    if (doneCount !== sim.ballPlans.length) {
+      sim.compileStatus = 'Hata';
+      sim.compileError = 'Ön hesaplama tamamlanamadı.';
       return;
     }
 
-    maybeResetLoop();
+    const signTotals = computeSignTotals(sim);
+    const elapsedSec = Math.max(1, Number(sim.dropDuration));
+    sim.precomputedRun = {
+      plusCount: signTotals.plus,
+      minusCount: signTotals.minus,
+      totalCount: sim.ballPlans.length,
+      elapsedSec,
+      current: Number((sim.ballPlans.length / elapsedSec).toFixed(3)),
+    };
+    sim.compileStatus = 'Tamamlandı';
+    sim.compileError = '';
+  }
 
-    if (state.isPaused) {
-      if (now >= state.pauseUntil) state.isPaused = false;
-      state.lastTime = now;
-      requestAnimationFrame(tick);
+  function renderAdminList() {
+    if (!el.simulationList) return;
+    if (!state.simulations.length) {
+      el.simulationList.innerHTML = '<p>Henüz simülasyon yok.</p>';
       return;
     }
 
-    const delta = (now - state.lastTime) / 1000;
-    window.scrollBy(0, state.speedPxPerSecond * delta);
-    maybePauseAtPost(now);
-    state.lastTime = now;
-    requestAnimationFrame(tick);
+    el.simulationList.innerHTML = state.simulations.map((sim) => `
+      <article class="item-row">
+        <div>
+          <p><strong>${escapeHtml(sim.name)}</strong></p>
+          <small>Toplam top: ${sim.downBallCount + sim.upBallCount} • Engel: ${sim.obstacleCount} • Süre: ${sim.dropDuration}s</small>
+          <small>Durum: <span class="status ${sim.compileStatus === 'Tamamlandı' ? 'ok' : ''}">${sim.compileStatus}</span>${sim.compileError ? ` (${escapeHtml(sim.compileError)})` : ''}</small>
+        </div>
+        <button class="btn" data-delete-id="${sim.id}">Sil</button>
+      </article>
+    `).join('');
   }
 
-  function bindEvents() {
-    if (el.postType && el.parentPostSelect) {
-      el.postType.addEventListener('change', () => {
-        el.parentPostSelect.disabled = el.postType.value !== 'comment';
+  function renderFeedButtons() {
+    if (!el.feedButtonList) return;
+    if (!state.simulations.length) {
+      el.feedButtonList.innerHTML = '<p>Kayıtlı simülasyon yok. Önce Admin sayfasından oluşturun.</p>';
+      return;
+    }
+    el.feedButtonList.innerHTML = state.simulations.map((sim) => `<button class="btn launch-btn" data-launch-id="${sim.id}" ${sim.compileStatus !== 'Tamamlandı' ? 'disabled' : ''}>${escapeHtml(sim.name)} ${sim.compileStatus !== 'Tamamlandı' ? '• Devam Ediyor' : ''}</button>`).join('');
+  }
+
+  function renderStatsButtons() {
+    if (!el.statsButtonList) return;
+    if (!state.simulations.length) {
+      el.statsButtonList.innerHTML = '<p>Kayıtlı simülasyon yok.</p>';
+      return;
+    }
+    el.statsButtonList.innerHTML = state.simulations.map((sim) => `<button class="btn launch-btn" data-stats-id="${sim.id}">${escapeHtml(sim.name)}</button>`).join('');
+  }
+
+  function setupEngine(sim) {
+    return {
+      sim,
+      layout: sim.layout,
+      ctx: el.simulationCanvas.getContext('2d'),
+      running: false,
+      startedAt: 0,
+      elapsed: 0,
+      runtimeBalls: [],
+      doneCount: 0,
+    };
+  }
+
+  function draw(engine) {
+    const { ctx, sim, layout } = engine;
+    ctx.fillStyle = sim.backgroundColor;
+    ctx.fillRect(0, 0, layout.width, layout.height);
+
+    ctx.fillStyle = sim.wallColor;
+    const wallW = 28;
+    ctx.fillRect(layout.leftWallX - wallW, 0, wallW, layout.height);
+    ctx.fillRect(layout.rightWallX, 0, wallW, layout.height);
+
+    ctx.fillStyle = sim.obstacleColor;
+    for (const o of layout.obstacles) {
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (const b of engine.runtimeBalls) {
+      if (!b.active) continue;
+      const style = getDirectionStyle(sim, b.dir);
+      ctx.fillStyle = style.color;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, sim.ballSize, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#08111b';
+      ctx.font = `${sim.ballSize + 4}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(style.sign, b.x, b.y + 1);
+    }
+  }
+
+  function updateRuntimeBalls(engine) {
+    engine.runtimeBalls = engine.sim.ballPlans.map((plan) => computeBallState(engine.sim, engine.layout, plan, engine.elapsed));
+    engine.doneCount = engine.runtimeBalls.reduce((acc, b) => acc + (b.done ? 1 : 0), 0);
+  }
+
+  function runSimulationLoop() {
+    const engine = state.engine;
+    if (!engine || !engine.running) return;
+
+    engine.elapsed = performance.now() - engine.startedAt;
+    updateRuntimeBalls(engine);
+    draw(engine);
+
+    const elapsedSec = engine.elapsed / 1000;
+    el.timerDisplay.textContent = `${elapsedSec.toFixed(1)}s`;
+
+    const reachedDuration = elapsedSec >= engine.sim.dropDuration;
+    const allDone = engine.doneCount === engine.sim.ballPlans.length;
+    if (reachedDuration && allDone) {
+      engine.running = false;
+      finishSimulation(engine);
+      return;
+    }
+    requestAnimationFrame(runSimulationLoop);
+  }
+
+  function finishSimulation(engine) {
+    const signTotals = computeSignTotals(engine.sim);
+    const total = engine.sim.ballPlans.length;
+    const enteredDuration = Math.max(1, Number(engine.sim.dropDuration));
+    state.runs[engine.sim.id] = {
+      simulationId: engine.sim.id,
+      simulationName: engine.sim.name,
+      plusCount: signTotals.plus,
+      minusCount: signTotals.minus,
+      totalCount: total,
+      elapsedSec: enteredDuration,
+      current: Number((total / enteredDuration).toFixed(3)),
+      plusColor: getSignColor(engine.sim, '+'),
+      minusColor: getSignColor(engine.sim, '-'),
+      finishedAt: Date.now(),
+    };
+    save();
+
+    setTimeout(() => {
+      el.simulationView.classList.add('hidden');
+      el.feedButtonsView.classList.remove('hidden');
+      state.engine = null;
+      renderFeedButtons();
+    }, 600);
+  }
+
+  function showCountdown(startFn) {
+    let n = 3;
+    el.countdownOverlay.classList.remove('hidden');
+    el.countdownOverlay.textContent = String(n);
+    const iv = setInterval(() => {
+      n -= 1;
+      if (n <= 0) {
+        clearInterval(iv);
+        el.countdownOverlay.classList.add('hidden');
+        startFn();
+      } else {
+        el.countdownOverlay.textContent = String(n);
+      }
+    }, 1000);
+  }
+
+  function openSimulation(simId) {
+    const sim = state.simulations.find((x) => x.id === simId);
+    if (!sim || sim.compileStatus !== 'Tamamlandı' || !sim.layout || !sim.ballPlans?.length) return;
+
+    el.feedButtonsView.classList.add('hidden');
+    el.simulationView.classList.remove('hidden');
+    el.activeSimName.textContent = sim.name;
+    el.timerDisplay.style.color = sim.timerColor;
+    el.timerDisplay.style.fontSize = `${sim.timerSize}px`;
+    el.timerDisplay.textContent = '0.0s';
+
+    state.engine = setupEngine(sim);
+    state.engine.runtimeBalls = sim.ballPlans.map((plan) => ({ active: false, done: false, x: 0, y: 0, dir: plan.dir }));
+    draw(state.engine);
+
+    el.playButton.disabled = false;
+    el.playButton.onclick = () => {
+      el.playButton.disabled = true;
+      showCountdown(() => {
+        if (!state.engine) return;
+        state.engine.running = true;
+        state.engine.startedAt = performance.now();
+        state.engine.elapsed = 0;
+        runSimulationLoop();
       });
-      el.parentPostSelect.disabled = true;
+    };
+  }
+
+  function showStats(simId) {
+    const sim = state.simulations.find((x) => x.id === simId);
+    if (!sim) return;
+
+    const run = state.runs[sim.id];
+    el.statsButtonsView.classList.add('hidden');
+    el.statsDetailView.classList.remove('hidden');
+
+    if (!run) {
+      el.statsDetail.innerHTML = `<h3>${escapeHtml(sim.name)}</h3><p>Henüz bu simülasyon oynatılmadı.</p>`;
+      return;
     }
 
-    if (el.form) {
-      el.form.addEventListener('submit', onPublish);
-    }
+    const plusColor = run.plusColor || getSignColor(sim, '+');
+    const minusColor = run.minusColor || getSignColor(sim, '-');
 
-    if (el.manageList) {
-      el.manageList.addEventListener('click', (event) => {
-        const btn = event.target.closest('[data-delete-post-id]');
-        if (!btn) return;
-        deletePostOrComment(btn.getAttribute('data-delete-post-id'));
-      });
-    }
+    el.statsDetail.innerHTML = `
+      <h3>${escapeHtml(run.simulationName)}</h3>
+      <p style="color:${plusColor}">Geçen + yük sayısı : ${run.plusCount}</p>
+      <p style="color:${minusColor}">Geçen - yük sayısı : ${run.minusCount}</p>
+      <p>Toplam yük sayısı : ${run.totalCount}</p>
+      <p>Geçen süre : ${run.elapsedSec} sn</p>
+      <p class="stats-result"><strong>SONUÇ</strong></p>
+      <p>Akım Büyüklüğü : ${run.totalCount} / ${run.elapsedSec} = ${run.current}</p>
+    `;
+  }
 
-    if (el.suggestionForm) {
-      el.suggestionForm.addEventListener('submit', onAddSuggestion);
-    }
+  function wireAdmin() {
+    renderAdminList();
 
-    if (el.suggestionManageList) {
-      el.suggestionManageList.addEventListener('click', (event) => {
-        const btn = event.target.closest('[data-delete-suggestion-id]');
-        if (!btn) return;
-        deleteSuggestion(btn.getAttribute('data-delete-suggestion-id'));
-      });
-    }
+    el.simulationForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const sim = createSimulationFromForm(el.simulationForm);
+      if (!sim) return;
 
-    if (el.searchInput) {
-      el.searchInput.addEventListener('input', renderSuggestions);
-    }
+      state.simulations.unshift(sim);
+      save();
+      renderAdminList();
 
-    if (el.autoScrollEnabled) {
-      el.autoScrollEnabled.addEventListener('change', () => {
-        state.autoScroll = el.autoScrollEnabled.checked;
-      });
-    }
+      setTimeout(() => {
+        runPrecompute(sim);
+        save();
+        renderAdminList();
+      }, 40);
 
-    if (el.pauseAtPosts) {
-      el.pauseAtPosts.addEventListener('change', () => {
-        state.pauseAtPosts = el.pauseAtPosts.checked;
-      });
-    }
+      el.simulationForm.reset();
+      document.getElementById('wallGap').value = '760';
+      document.getElementById('obstacleCount').value = '18';
+      document.getElementById('downBallCount').value = '8';
+      document.getElementById('upBallCount').value = '0';
+      document.getElementById('dropDuration').value = '14';
+    });
 
-    if (el.scrollSpeed) {
-      el.scrollSpeed.addEventListener('input', () => {
-        state.speedPxPerSecond = Number(el.scrollSpeed.value);
-      });
+    el.simulationList.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-delete-id]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-delete-id');
+      state.simulations = state.simulations.filter((x) => x.id !== id);
+      delete state.runs[id];
+      save();
+      renderAdminList();
+    });
+  }
+
+  function wireFeed() {
+    renderFeedButtons();
+    el.feedButtonList.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-launch-id]');
+      if (!btn || btn.hasAttribute('disabled')) return;
+      openSimulation(btn.getAttribute('data-launch-id'));
+    });
+  }
+
+  function wireStats() {
+    renderStatsButtons();
+    el.statsButtonList.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-stats-id]');
+      if (!btn) return;
+      showStats(btn.getAttribute('data-stats-id'));
+    });
+
+    el.statsBackButton.addEventListener('click', () => {
+      el.statsDetailView.classList.add('hidden');
+      el.statsButtonsView.classList.remove('hidden');
+    });
+  }
+
+  function assignFormNames() {
+    const ids = [
+      'simName', 'backgroundColor', 'wallGap', 'wallColor', 'obstacleSize', 'obstacleCount',
+      'obstacleColor', 'ballSize', 'downBallColor', 'downBallSign', 'downBallCount',
+      'upBallColor', 'upBallSign', 'upBallCount', 'dropDuration', 'timerColor', 'timerSize',
+    ];
+    for (const id of ids) {
+      const input = document.getElementById(id);
+      if (input) input.name = id;
     }
   }
 
   function init() {
-    loadData();
-    refresh();
-    bindEvents();
-
-    requestAnimationFrame((start) => {
-      state.lastTime = start;
-      requestAnimationFrame(tick);
-    });
+    assignFormNames();
+    if (page === 'admin') wireAdmin();
+    if (page === 'feed') wireFeed();
+    if (page === 'stats') wireStats();
   }
 
   init();
