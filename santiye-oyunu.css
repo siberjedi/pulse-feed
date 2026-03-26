@@ -126,3 +126,6 @@ input, select {
   padding: 12px;
 }
 .hidden { display: none !important; }
+
+.chance-card-img{max-width:260px;width:100%;border-radius:10px;border:1px solid #475569;margin-top:8px}
+.capital-list{display:grid;gap:6px;text-align:left}

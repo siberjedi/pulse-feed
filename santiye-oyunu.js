@@ -28,6 +28,7 @@ const DEFAULT_GAME_DATA = {
 let GAME_DATA = structuredClone(DEFAULT_GAME_DATA);
 const state = { groupCount: 4, startingCapital: 5000, groups: [], round: 1, infoIndex: 0, selectedChanceCard: null, timerId: null, secondsLeft: 180 };
 const $ = (id) => document.getElementById(id);
+const ROUND_TASK_INDEXES = [[0,1],[2,3],[4,5],[6,7],[8,9],[10]];
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -138,21 +139,27 @@ function runChanceAnimation() {
   setTimeout(() => {
     clearInterval(interval);
     state.selectedChanceCard = cards[Math.floor(Math.random() * cards.length)];
-    selected.innerHTML = `<strong>Seçilen Şans Kartı:</strong> ${state.selectedChanceCard.name}`;
+    selected.innerHTML = `<strong>Seçilen Şans Kartı:</strong> ${state.selectedChanceCard.name}${state.selectedChanceCard.image ? `<br><img class="chance-card-img" src="${state.selectedChanceCard.image}" alt="${state.selectedChanceCard.name}" />` : ''}`;
   }, 3000);
 }
 
 $('toTaskBtn').addEventListener('click', async () => { showScreen('task'); await showOverlayCountdown(3); renderTaskCards(); startTaskTimer(); });
 
 function currentRoundTasks() {
-  const ids = GAME_DATA.roundPairs[state.round - 1];
-  return ids.map((id) => GAME_DATA.tasks.find((t) => String(t.id) === String(id))).filter(Boolean);
+  const idxs = ROUND_TASK_INDEXES[state.round - 1] || [];
+  return idxs.map((i) => GAME_DATA.tasks[i]).filter(Boolean);
+}
+
+function renderCapitalsBoard() {
+  const html = state.groups.map((g) => `<div><strong>${g.name}</strong>: ${g.capital} TL</div>`).join('');
+  $('capitalsBoard').innerHTML = `<strong>Güncel Sermayeler</strong><div class="capital-list">${html}</div>`;
 }
 
 function renderTaskCards() {
   const tasks = currentRoundTasks();
   $('taskCards').innerHTML = tasks.map((t) => `<article class="card"><img src="${t.image || ''}" alt="${t.name}" /><h3>${t.name}</h3><p>Yük: ${t.load}</p><p>Ödül: ${t.reward}</p></article>`).join('');
-  $('chancePinned').innerHTML = state.selectedChanceCard ? `<strong>Aktif Şans Kartı:</strong> ${state.selectedChanceCard.name}` : '<strong>Bu tur şans kartı yok.</strong>';
+  $('chancePinned').innerHTML = state.selectedChanceCard ? `<strong>Aktif Şans Kartı:</strong> ${state.selectedChanceCard.name}${state.selectedChanceCard.image ? `<br><img class="chance-card-img" src="${state.selectedChanceCard.image}" alt="${state.selectedChanceCard.name}" />` : ''}` : '<strong>Bu tur şans kartı yok.</strong>';
+  renderCapitalsBoard();
 }
 
 async function showOverlayCountdown(from) {
@@ -219,6 +226,7 @@ $('calculateBtn').addEventListener('click', () => {
   const winner = [...state.groups].sort((a, b) => b.capital - a.capital)[0];
   $('scoreResults').insertAdjacentHTML('beforeend', `<p><strong>Bu tur lider:</strong> ${winner.name}</p>`);
   $('nextRoundBtn').classList.remove('hidden');
+  renderCapitalsBoard();
 });
 
 $('nextRoundBtn').addEventListener('click', () => {
@@ -236,8 +244,17 @@ function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 function beep(freq, durationSec) { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.connect(gain); gain.connect(ctx.destination); osc.frequency.value = freq; gain.gain.value = 0.05; osc.start(); osc.stop(ctx.currentTime + durationSec); }
 
 
+
+function renderInfoExamples() {
+  if ($('infoTaskExample')) $('infoTaskExample').src = GAME_DATA.tasks?.[0]?.image || '';
+  if ($('infoWorkerExample')) $('infoWorkerExample').src = GAME_DATA.workers?.[0]?.image || '';
+  if ($('infoMachineExample')) $('infoMachineExample').src = GAME_DATA.machines?.[0]?.image || '';
+  if ($('infoChanceExample')) $('infoChanceExample').src = GAME_DATA.chanceCards?.[0]?.image || '';
+}
+
 (async function initConfig(){
   GAME_DATA = await loadConfig();
   $('introImage').src = GAME_DATA.introImage || DEFAULT_GAME_DATA.introImage;
   document.title = `${GAME_DATA.eventTitle || 'Şantiye Patronu'} - Etkinlik Akışı`;
+  renderInfoExamples();
 })();
