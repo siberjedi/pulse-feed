@@ -13,15 +13,28 @@ const defaultConfig = {
 };
 
 let config = load();
+let dirty = false;
 const $ = (id) => document.getElementById(id);
+
+function uid() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 function load() {
   try { return { ...defaultConfig, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; }
   catch { return structuredClone(defaultConfig); }
 }
 
-function save() {
+function markDirty() {
+  dirty = true;
+  $('saveStatus').textContent = 'Kaydedilmedi';
+}
+
+function save(forceStatus = true) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  dirty = false;
+  if (forceStatus) $('saveStatus').textContent = `Kaydedildi • ${new Date().toLocaleTimeString('tr-TR')}`;
 }
 
 function asDataURL(file) {
@@ -44,14 +57,16 @@ function render() {
 
 function removeById(listName, id) {
   config[listName] = config[listName].filter((x) => x.id !== id);
-  save(); render();
+  markDirty();
+  render();
 }
 
 function bindImageInput(input, onValue) {
   input.addEventListener('change', async (e) => {
     const val = await asDataURL(e.target.files?.[0]);
     onValue(val);
-    save(); render();
+    markDirty();
+    render();
   });
 }
 
@@ -76,7 +91,7 @@ function renderTasks() {
       inp.addEventListener('input', () => {
         const key = inp.dataset.k;
         item[key] = key === 'name' ? inp.value : Number(inp.value || 0);
-        save();
+        markDirty();
       });
     });
     bindImageInput(card.querySelector('input[data-k="imageFile"]'), (v) => { item.image = v; });
@@ -104,7 +119,7 @@ function renderWorkers() {
       inp.addEventListener('input', () => {
         const key = inp.dataset.k;
         item[key] = key === 'name' ? inp.value : Number(inp.value || 0);
-        save();
+        markDirty();
       });
     });
     bindImageInput(card.querySelector('input[data-k="imageFile"]'), (v) => { item.image = v; });
@@ -132,7 +147,7 @@ function renderMachines() {
       inp.addEventListener('input', () => {
         const key = inp.dataset.k;
         item[key] = key === 'name' ? inp.value : Number(inp.value || 0);
-        save();
+        markDirty();
       });
     });
     bindImageInput(card.querySelector('input[data-k="imageFile"]'), (v) => { item.image = v; });
@@ -178,13 +193,14 @@ function renderChanceCards() {
       <button type="button" data-act="addEffect">+ Etki Ekle</button>`;
 
     card.querySelector('[data-remove]').addEventListener('click', () => removeById('chanceCards', item.id));
-    card.querySelector('input[data-k="name"]').addEventListener('input', (e) => { item.name = e.target.value; save(); });
+    card.querySelector('input[data-k="name"]').addEventListener('input', (e) => { item.name = e.target.value; markDirty(); });
     bindImageInput(card.querySelector('input[data-k="imageFile"]'), (v) => { item.image = v; });
 
     card.querySelector('[data-act="addEffect"]').addEventListener('click', () => {
       item.effects = item.effects || [];
       item.effects.push({ target: 'worker_power', op: '+', value: 0 });
-      save(); render();
+      markDirty();
+      render();
     });
 
     card.querySelectorAll('.effect-row').forEach((row, rowIndex) => {
@@ -192,12 +208,13 @@ function renderChanceCards() {
         inp.addEventListener('input', () => {
           const key = inp.dataset.k;
           item.effects[rowIndex][key] = key === 'value' ? Number(inp.value || 0) : inp.value;
-          save();
+          markDirty();
         });
       });
       row.querySelector('[data-act="rm"]').addEventListener('click', () => {
         item.effects.splice(rowIndex, 1);
-        save(); render();
+        markDirty();
+        render();
       });
     });
 
@@ -205,27 +222,34 @@ function renderChanceCards() {
   }
 }
 
-$('eventTitle').addEventListener('input', (e) => { config.eventTitle = e.target.value; save(); });
+$('eventTitle').addEventListener('input', (e) => { config.eventTitle = e.target.value; markDirty(); });
 bindImageInput($('introImage'), (v) => { config.introImage = v; $('introPreview').src = v; });
 
 $('addTaskBtn').addEventListener('click', () => {
-  config.tasks.push({ id: crypto.randomUUID(), name: '', load: 0, reward: 0, image: '' });
-  save(); render();
+  config.tasks.push({ id: uid(), name: '', load: 0, reward: 0, image: '' });
+  markDirty();
+  render();
 });
 $('addWorkerBtn').addEventListener('click', () => {
-  config.workers.push({ id: crypto.randomUUID(), name: '', power: 0, cost: 0, image: '' });
-  save(); render();
+  config.workers.push({ id: uid(), name: '', power: 0, cost: 0, image: '' });
+  markDirty();
+  render();
 });
 $('addMachineBtn').addEventListener('click', () => {
-  config.machines.push({ id: crypto.randomUUID(), name: '', gain: 0, cost: 0, image: '' });
-  save(); render();
+  config.machines.push({ id: uid(), name: '', gain: 0, cost: 0, image: '' });
+  markDirty();
+  render();
 });
 $('addChanceBtn').addEventListener('click', () => {
-  config.chanceCards.push({ id: crypto.randomUUID(), name: '', image: '', effects: [] });
-  save(); render();
+  config.chanceCards.push({ id: uid(), name: '', image: '', effects: [] });
+  markDirty();
+  render();
 });
 
+$('saveBtn').addEventListener('click', () => save());
+
 $('exportBtn').addEventListener('click', () => {
+  if (dirty) save(false);
   const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -239,12 +263,19 @@ $('importInput').addEventListener('change', async (e) => {
   if (!file) return;
   const txt = await file.text();
   config = { ...defaultConfig, ...JSON.parse(txt) };
-  save(); render();
+  markDirty();
+  render();
 });
 
 $('resetBtn').addEventListener('click', () => {
   config = structuredClone(defaultConfig);
-  save(); render();
+  markDirty();
+  render();
+});
+
+window.addEventListener('beforeunload', () => {
+  if (dirty) save(false);
 });
 
 render();
+save();

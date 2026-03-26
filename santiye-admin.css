@@ -14,3 +14,6 @@ button,.file-btn{border:0;background:#22c55e;color:#052e16;padding:10px 14px;bor
 .mini{max-width:120px}
 .subhead{font-size:.9rem;color:#93c5fd;margin-top:6px}
 .effect-row{display:grid;grid-template-columns:1fr 100px 100px auto;gap:8px;align-items:end}
+
+.save-dock{position:fixed;right:16px;bottom:16px;display:flex;gap:8px;align-items:center;background:#020617;border:1px solid #334155;border-radius:12px;padding:10px 12px;z-index:1000}
+#saveStatus{font-size:.85rem;color:#93c5fd}
