@@ -1,4 +1,7 @@
 const STORAGE_KEY = 'santiyeConfig.v1';
+const DB_NAME = 'santiye_game_db';
+const STORE_NAME = 'kv';
+const DB_KEY = 'config';
 
 const DEFAULT_GAME_DATA = {
   eventTitle: 'Şantiye Patronu',
@@ -22,18 +25,36 @@ const DEFAULT_GAME_DATA = {
   roundPairs: [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11]],
 };
 
-const GAME_DATA = loadConfig();
+let GAME_DATA = structuredClone(DEFAULT_GAME_DATA);
 const state = { groupCount: 4, startingCapital: 5000, groups: [], round: 1, infoIndex: 0, selectedChanceCard: null, timerId: null, secondsLeft: 180 };
 const $ = (id) => document.getElementById(id);
 
-function loadConfig() {
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function loadConfig() {
+  try {
+    const fromDb = await idbGet(DB_KEY);
+    if (fromDb) return { ...DEFAULT_GAME_DATA, ...fromDb, roundPairs: DEFAULT_GAME_DATA.roundPairs };
+  } catch {}
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    return {
-      ...DEFAULT_GAME_DATA,
-      ...stored,
-      roundPairs: DEFAULT_GAME_DATA.roundPairs,
-    };
+    return { ...DEFAULT_GAME_DATA, ...stored, roundPairs: DEFAULT_GAME_DATA.roundPairs };
   } catch {
     return structuredClone(DEFAULT_GAME_DATA);
   }
@@ -59,8 +80,6 @@ function showScreen(name) {
 
 document.querySelector('[data-next="setup"]').addEventListener('click', () => showScreen('setup'));
 
-$('introImage').src = GAME_DATA.introImage || DEFAULT_GAME_DATA.introImage;
-document.title = `${GAME_DATA.eventTitle || 'Şantiye Patronu'} - Etkinlik Akışı`;
 
 $('toNamesBtn').addEventListener('click', () => {
   state.groupCount = Number($('groupCountSelect').value);
@@ -215,3 +234,10 @@ function renderFinal() {
 $('restartBtn').addEventListener('click', () => window.location.reload());
 function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 function beep(freq, durationSec) { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.connect(gain); gain.connect(ctx.destination); osc.frequency.value = freq; gain.gain.value = 0.05; osc.start(); osc.stop(ctx.currentTime + durationSec); }
+
+
+(async function initConfig(){
+  GAME_DATA = await loadConfig();
+  $('introImage').src = GAME_DATA.introImage || DEFAULT_GAME_DATA.introImage;
+  document.title = `${GAME_DATA.eventTitle || 'Şantiye Patronu'} - Etkinlik Akışı`;
+})();
