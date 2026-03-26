@@ -26,7 +26,7 @@ const DEFAULT_GAME_DATA = {
 };
 
 let GAME_DATA = structuredClone(DEFAULT_GAME_DATA);
-const state = { groupCount: 4, startingCapital: 5000, groups: [], round: 1, infoIndex: 0, selectedChanceCard: null, timerId: null, secondsLeft: 180 };
+const state = { groupCount: 4, startingCapital: 5000, groups: [], round: 1, infoIndex: 0, selectedChanceCard: null, usedChanceCardIds: new Set(), timerId: null, secondsLeft: 180 };
 const $ = (id) => document.getElementById(id);
 const ROUND_TASK_INDEXES = [[0,1],[2,3],[4,5],[6,7],[8,9],[10]];
 
@@ -110,7 +110,7 @@ function renderInfoSlide() {
 $('infoPrevBtn').addEventListener('click', () => { state.infoIndex = Math.max(0, state.infoIndex - 1); renderInfoSlide(); });
 $('infoNextBtn').addEventListener('click', () => {
   if (state.infoIndex < 3) return state.infoIndex += 1, renderInfoSlide();
-  state.round = 1; prepareRound(); showScreen('round-flow');
+  state.round = 1; state.usedChanceCardIds = new Set(); prepareRound(); showScreen('round-flow');
 });
 
 function prepareRound() {
@@ -124,10 +124,11 @@ function prepareRound() {
 function runChanceAnimation() {
   const anim = $('chanceAnimation');
   const selected = $('selectedChanceCard');
-  const cards = GAME_DATA.chanceCards || [];
+  const allCards = GAME_DATA.chanceCards || [];
+  const cards = allCards.filter((c) => !state.usedChanceCardIds.has(String(c.id)));
   if (!cards.length) {
     state.selectedChanceCard = null;
-    anim.textContent = 'Şans kartı bulunamadı.';
+    anim.textContent = 'Kalan farklı şans kartı yok.';
     selected.textContent = '';
     return;
   }
@@ -139,6 +140,7 @@ function runChanceAnimation() {
   setTimeout(() => {
     clearInterval(interval);
     state.selectedChanceCard = cards[Math.floor(Math.random() * cards.length)];
+    state.usedChanceCardIds.add(String(state.selectedChanceCard.id));
     selected.innerHTML = `<strong>Seçilen Şans Kartı:</strong> ${state.selectedChanceCard.name}${state.selectedChanceCard.image ? `<br><img class="chance-card-img" src="${state.selectedChanceCard.image}" alt="${state.selectedChanceCard.name}" />` : ''}`;
   }, 3000);
 }
