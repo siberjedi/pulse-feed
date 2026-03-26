@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Şantiye Patronu - Admin Panel</title>
+  <link rel="stylesheet" href="santiye-admin.css" />
+</head>
+<body>
+  <main class="admin">
+    <header>
+      <h1>Şantiye Patronu - Admin Paneli</h1>
+      <p>Değişiklikler otomatik kaydedilir.</p>
+      <div class="row">
+        <button id="exportBtn" type="button">Ayarları Dışa Aktar (JSON)</button>
+        <label class="file-btn">Ayarları İçe Aktar (JSON)
+          <input id="importInput" type="file" accept="application/json" hidden />
+        </label>
+        <button id="resetBtn" type="button" class="danger">Varsayılanlara Dön</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2>1) Genel Ayarlar</h2>
+      <label>Etkinlik Adı
+        <input id="eventTitle" type="text" />
+      </label>
+      <label>Giriş Görseli
+        <input id="introImage" type="file" accept="image/*" />
+      </label>
+      <img id="introPreview" class="preview" alt="Giriş görseli" />
+    </section>
+
+    <section class="panel">
+      <div class="head-line"><h2>2) Görev Kartları</h2><button id="addTaskBtn" type="button">+ Ekle</button></div>
+      <div id="taskList" class="stack"></div>
+    </section>
+
+    <section class="panel">
+      <div class="head-line"><h2>3) İşçi Kartları</h2><button id="addWorkerBtn" type="button">+ Ekle</button></div>
+      <div id="workerList" class="stack"></div>
+    </section>
+
+    <section class="panel">
+      <div class="head-line"><h2>4) Makine Kartları</h2><button id="addMachineBtn" type="button">+ Ekle</button></div>
+      <div id="machineList" class="stack"></div>
+    </section>
+
+    <section class="panel">
+      <div class="head-line"><h2>5) Şans Kartları</h2><button id="addChanceBtn" type="button">+ Ekle</button></div>
+      <div id="chanceList" class="stack"></div>
+    </section>
+  </main>
+
+  <script src="santiye-admin.js"></script>
+</body>
+</html>
