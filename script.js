@@ -239,7 +239,7 @@
 
     const finalPrompt = `${prompt}\n\nKural: 100 kelimeyi aşmayacak cevap ver.`;
 
-    for (const pid of targets) {
+    await Promise.all(targets.map(async (pid) => {
       const provider = PROVIDERS.find((p) => p.id === pid);
       addChat(pid, 'Game Master', prompt);
       try {
@@ -248,7 +248,7 @@
       } catch (e) {
         addChat(pid, 'Sistem', `Hata: ${String(e.message || e)}`);
       }
-    }
+    }));
   }
 
   function parseOneWordVote(text, candidates) {
@@ -278,7 +278,7 @@
     const ballots = [];
     const totals = Object.fromEntries(candidates.map((c) => [c, 0]));
 
-    for (const pid of targets) {
+    await Promise.all(targets.map(async (pid) => {
       const provider = PROVIDERS.find((p) => p.id === pid);
       const rule = 'Kural: sadece tek kelime ile cevap ver.';
       const selfRule = mode === 'selection'
@@ -299,7 +299,7 @@
         addChat(pid, 'Sistem', `Hata: ${String(e.message || e)}`);
         ballots.push({ voter: pid, vote: null });
       }
-    }
+    }));
 
     const title = mode === 'elimination' ? 'Eleme Oylaması Sonucu' : 'Belirleme Oylaması Sonucu';
     state.flow.lastVoteText = formatVoteResult(title, ballots, totals);
@@ -339,7 +339,7 @@
     const totals = Object.fromEntries(candidates.map((c) => [c, 0]));
     const lines = ['Puanlama Sonucu', ''];
 
-    for (const pid of selectedTargets()) {
+    await Promise.all(selectedTargets().map(async (pid) => {
       const provider = PROVIDERS.find((p) => p.id === pid);
       const otherCandidates = candidates.filter((c) => c !== pid);
       const prompt = `${q}\nAdaylar: ${otherCandidates.join(', ')}\nPuan aralığı: ${min}-${max}. ${allowedList.length ? `Sadece şu puanlar: ${allowedList.join(', ')}` : ''}\nKural: sadece kime kaç puan verdiğini belirt , 10 kelimeyi geçme.`;
@@ -355,7 +355,7 @@
         addChat(pid, 'Sistem', `Hata: ${String(e.message || e)}`);
         lines.push(`${pid}: hata`);
       }
-    }
+    }));
 
     lines.push('', 'Toplamlar:');
     for (const [k, v] of Object.entries(totals)) lines.push(`- ${k}: ${v}`);
@@ -467,6 +467,10 @@
         <div class="chat-log" id="log-${p.id}">${logs || '<span class="muted">Henüz mesaj yok.</span>'}</div>
       </article>`;
     }).join('');
+
+    wrap.querySelectorAll('.chat-log').forEach((log) => {
+      log.scrollTop = log.scrollHeight;
+    });
 
     wrap.querySelectorAll('[data-eliminate]').forEach((b) => b.addEventListener('click', () => {
       state.flow.roleByModel[b.dataset.eliminate] = 'jury';
