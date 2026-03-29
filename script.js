@@ -77,6 +77,8 @@
     const signal = opts.signal;
     const endpoint = resolveEndpoint(c.endpoint, c.proxyUrl);
     validateEndpointForBrowser(endpoint);
+
+    try {
     if (provider.apiType === 'openai') {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -120,6 +122,7 @@
           'content-type': 'application/json',
           'x-api-key': c.apiKey,
           'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
           model: c.model,
@@ -161,14 +164,28 @@
     }
 
     throw new Error('Desteklenmeyen provider tipi');
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      const message = String(err?.message || err || 'Bilinmeyen hata');
+      if (message.includes('Failed to fetch')) {
+        throw new Error(`[${provider.id}] Sunucuya ulaşılamadı. Kontrol et: URL (${endpoint}), CORS/proxy, API key.`);
+      }
+      throw err;
+    }
   }
 
   async function safeErr(res) {
     try {
-      const t = await res.text();
-      return `${res.status} ${res.statusText} · ${t.slice(0, 200)}`;
+      const body = await res.text();
+      try {
+        const json = JSON.parse(body);
+        const msg = json?.error?.message || json?.message || body;
+        return `HTTP ${res.status} ${res.statusText} · ${String(msg).slice(0, 260)}`;
+      } catch {
+        return `HTTP ${res.status} ${res.statusText} · ${String(body).slice(0, 260)}`;
+      }
     } catch {
-      return `${res.status} ${res.statusText}`;
+      return `HTTP ${res.status} ${res.statusText}`;
     }
   }
 
