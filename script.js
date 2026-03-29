@@ -1,45 +1,536 @@
 (() => {
-  const POSTS_KEY = 'pulseFeedPosts.v4';
-  const SUGGESTIONS_KEY = 'pulseSuggestions.v1';
+  const PROVIDERS = [
+    { id: 'gpt', label: '🤖 GPT', defaultEndpoint: 'https://api.openai.com/v1/chat/completions', defaultModel: 'gpt-4o-mini', apiType: 'openai' },
+    { id: 'gemini', label: '✨ Gemini', defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', defaultModel: 'gemini-1.5-flash', apiType: 'gemini' },
+    { id: 'claude', label: '🧠 Claude', defaultEndpoint: 'https://api.anthropic.com/v1/messages', defaultModel: 'claude-sonnet-4-5-20250929', apiType: 'anthropic' },
+    { id: 'grok', label: '⚡ Grok', defaultEndpoint: 'https://api.x.ai/v1/responses', defaultModel: 'grok-4.20-reasoning', apiType: 'xai-responses' },
+    { id: 'llama', label: '🦙 Llama', defaultEndpoint: 'https://api.openai.com/v1/chat/completions', defaultModel: 'meta-llama/llama-3.1-70b-instruct', apiType: 'openai' },
+  ];
 
-  const page = document.body.dataset.page || 'admin';
+  const page = document.body.dataset.page;
+  const STORAGE_KEY = 'aiSurvivor.config.v1';
+  const FLOW_KEY = 'aiSurvivor.flow.v1';
 
   const state = {
-    posts: [],
-    suggestions: [],
-    autoScroll: true,
-    pauseAtPosts: true,
-    speedPxPerSecond: 34,
-    isPaused: false,
-    pauseUntil: 0,
-    lastTime: performance.now(),
-    loopResetPending: false,
+    config: loadJson(STORAGE_KEY, {}),
+    flow: loadJson(FLOW_KEY, {
+      chats: {},
+      roleByModel: {},
+      enabledTargets: PROVIDERS.map((p) => p.id),
+      lastVoteText: '',
+      lastScoreText: '',
+    }),
   };
 
-  const el = {
-    form: document.getElementById('composerForm'),
-    postText: document.getElementById('postText'),
-    postType: document.getElementById('postType'),
-    parentPostSelect: document.getElementById('parentPostSelect'),
-    mediaFile: document.getElementById('mediaFile'),
-    isSponsored: document.getElementById('isSponsored'),
-    authorHandle: document.getElementById('authorHandle'),
-    authorSubMeta: document.getElementById('authorSubMeta'),
-    feed: document.getElementById('feed'),
-    manageList: document.getElementById('manageList'),
-    suggestionForm: document.getElementById('suggestionForm'),
-    suggestionHandle: document.getElementById('suggestionHandle'),
-    suggestionBio: document.getElementById('suggestionBio'),
-    suggestionManageList: document.getElementById('suggestionManageList'),
-    suggestionsList: document.getElementById('suggestionsList'),
-    searchInput: document.getElementById('searchInput'),
-    autoScrollEnabled: document.getElementById('autoScrollEnabled'),
-    scrollSpeed: document.getElementById('scrollSpeed'),
-    pauseAtPosts: document.getElementById('pauseAtPosts'),
-  };
+  for (const p of PROVIDERS) {
+    state.flow.chats[p.id] ||= [];
+    state.flow.roleByModel[p.id] ||= 'player';
+  }
 
-  function uid() {
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  function loadJson(key, fallback) {
+    try {
+      return JSON.parse(localStorage.getItem(key) || 'null') || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function persistConfig() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.config)); }
+  function persistFlow() { localStorage.setItem(FLOW_KEY, JSON.stringify(state.flow)); }
+
+  function byId(id) { return document.getElementById(id); }
+
+  function cfg(providerId) {
+    return state.config[providerId] || {};
+  }
+
+
+  function resolveEndpoint(rawEndpoint, proxyUrl) {
+    if (!proxyUrl) return rawEndpoint;
+    const cleanedProxy = proxyUrl.trim();
+    if (!cleanedProxy) return rawEndpoint;
+    if (cleanedProxy.includes('{url}')) {
+      return cleanedProxy.replace('{url}', encodeURIComponent(rawEndpoint));
+    }
+    const joiner = cleanedProxy.includes('?') ? '&' : '?';
+    return `${cleanedProxy}${joiner}target=${encodeURIComponent(rawEndpoint)}`;
+  }
+
+
+  function normalizeProxyUrl(raw) {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    if (value.includes('/api/users')) {
+      try {
+        const u = new URL(value);
+        return `${u.origin}/relay?target={url}`;
+      } catch {
+        return 'http://localhost:3001/relay?target={url}';
+      }
+    }
+    return value;
+  }
+  function validateEndpointForBrowser(endpoint) {
+    if (location.protocol === 'https:' && String(endpoint).startsWith('http://')) {
+      throw new Error('Mixed content: HTTPS sayfada HTTP endpoint kullanılamaz');
+    }
+  }
+  function setStatus(providerId, ok, text) {
+    const el = byId(`status-${providerId}`);
+    if (!el) return;
+    el.className = `status-pill ${ok ? 'status-ok' : 'status-bad'}`;
+    el.textContent = text;
+  }
+
+  async function callProvider(provider, prompt, opts = {}) {
+    const c = cfg(provider.id);
+    if (!c.apiKey || !c.endpoint || !c.model) {
+      throw new Error('API ayarı eksik');
+    }
+
+    const signal = opts.signal;
+    const endpoint = resolveEndpoint(c.endpoint, c.proxyUrl);
+    validateEndpointForBrowser(endpoint);
+
+    try {
+    if (provider.apiType === 'openai') {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${c.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: c.model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+        }),
+      });
+      if (!res.ok) throw new Error(await safeErr(res));
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content?.trim() || '(boş cevap)';
+    }
+
+    if (provider.apiType === 'gemini') {
+      const url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}key=${encodeURIComponent(c.apiKey)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7 },
+        }),
+      });
+      if (!res.ok) throw new Error(await safeErr(res));
+      const data = await res.json();
+      return data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('\n').trim() || '(boş cevap)';
+    }
+
+    if (provider.apiType === 'anthropic') {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        signal,
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': c.apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: c.model,
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!res.ok) throw new Error(await safeErr(res));
+      const data = await res.json();
+      const textBlocks = (data?.content || []).filter((x) => x.type === 'text').map((x) => x.text);
+      return textBlocks.join('\n').trim() || '(boş cevap)';
+    }
+
+    if (provider.apiType === 'xai-responses') {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${c.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: c.model,
+          input: [
+            { role: 'system', content: 'You are a helpful AI assistant.' },
+            { role: 'user', content: prompt },
+          ],
+        }),
+      });
+      if (!res.ok) throw new Error(await safeErr(res));
+      const data = await res.json();
+      const outputText = data?.output_text
+        || (data?.output || [])
+          .flatMap((item) => item?.content || [])
+          .filter((c) => c?.type === 'output_text' || c?.type === 'text')
+          .map((c) => c?.text || '')
+          .join('\n');
+      return String(outputText || '').trim() || '(boş cevap)';
+    }
+
+    throw new Error('Desteklenmeyen provider tipi');
+    } catch (err) {
+      if (err?.name === 'AbortError') throw err;
+      const message = String(err?.message || err || 'Bilinmeyen hata');
+      if (message.includes('Failed to fetch')) {
+        throw new Error(`[${provider.id}] Sunucuya ulaşılamadı. Kontrol et: URL (${endpoint}), CORS/proxy, API key.`);
+      }
+      throw err;
+    }
+  }
+
+  async function safeErr(res) {
+    try {
+      const body = await res.text();
+      try {
+        const json = JSON.parse(body);
+        const msg = json?.error?.message || json?.message || body;
+        return `HTTP ${res.status} ${res.statusText} · ${String(msg).slice(0, 260)}`;
+      } catch {
+        return `HTTP ${res.status} ${res.statusText} · ${String(body).slice(0, 260)}`;
+      }
+    } catch {
+      return `HTTP ${res.status} ${res.statusText}`;
+    }
+  }
+
+  function addChat(modelId, role, content) {
+    state.flow.chats[modelId].push({ role, content, at: Date.now() });
+    persistFlow();
+    renderPanels();
+  }
+
+  function selectedTargets() {
+    const checks = Array.from(document.querySelectorAll('[data-target-model]'));
+    return checks.filter((c) => c.checked).map((c) => c.dataset.targetModel);
+  }
+
+  async function sendMasterChat() {
+    const prompt = byId('masterPrompt')?.value?.trim();
+    if (!prompt) return;
+    const targets = selectedTargets();
+    if (!targets.length) return alert('En az bir AI seçmelisin.');
+
+    const finalPrompt = `${prompt}\n\nKural: 100 kelimeyi aşmayacak cevap ver.`;
+
+    for (const pid of targets) {
+      const provider = PROVIDERS.find((p) => p.id === pid);
+      addChat(pid, 'Game Master', prompt);
+      try {
+        const ans = await callProvider(provider, finalPrompt);
+        addChat(pid, provider.label, ans);
+      } catch (e) {
+        addChat(pid, 'Sistem', `Hata: ${String(e.message || e)}`);
+      }
+    }
+  }
+
+  function parseOneWordVote(text, candidates) {
+    const clean = String(text || '').trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+    return candidates.find((c) => c.toLowerCase() === clean) || null;
+  }
+
+  function formatVoteResult(title, ballots, totals) {
+    const lines = [title, '', 'Oylar:'];
+    for (const b of ballots) lines.push(`- ${b.voter} -> ${b.vote || 'GEÇERSİZ'}`);
+    lines.push('', 'Toplam:');
+    for (const [k, v] of Object.entries(totals)) lines.push(`- ${k}: ${v}`);
+    return lines.join('\n');
+  }
+
+  async function runVote(mode) {
+    const q = byId('voteQuestion')?.value?.trim();
+    const candidates = Array.from(document.querySelectorAll('[data-vote-candidate]'))
+      .filter((x) => x.checked)
+      .map((x) => x.dataset.voteCandidate);
+
+    if (!q || !candidates.length) return alert('Soru ve en az bir aday gerekli.');
+
+    const targets = selectedTargets();
+    if (!targets.length) return alert('Oy kullanacak en az bir AI seç.');
+
+    const ballots = [];
+    const totals = Object.fromEntries(candidates.map((c) => [c, 0]));
+
+    for (const pid of targets) {
+      const provider = PROVIDERS.find((p) => p.id === pid);
+      const rule = 'Kural: sadece tek kelime ile cevap ver.';
+      const selfRule = mode === 'selection'
+        ? `Ek kural: Kendine oy VERME. Geçerli adaylar: ${candidates.join(', ')}.`
+        : `Ek kural: Kendine oy verebilirsin. Geçerli adaylar: ${candidates.join(', ')}.`;
+      const prompt = `${q}\nAdaylar: ${candidates.join(', ')}\n${selfRule}\n${rule}`;
+
+      addChat(pid, 'Game Master', `[${mode}] ${q}`);
+      try {
+        const ans = await callProvider(provider, prompt);
+        addChat(pid, provider.label, ans);
+
+        let vote = parseOneWordVote(ans, candidates);
+        if (mode === 'selection' && vote === pid) vote = null;
+        if (vote) totals[vote] += 1;
+        ballots.push({ voter: pid, vote });
+      } catch (e) {
+        addChat(pid, 'Sistem', `Hata: ${String(e.message || e)}`);
+        ballots.push({ voter: pid, vote: null });
+      }
+    }
+
+    const title = mode === 'elimination' ? 'Eleme Oylaması Sonucu' : 'Belirleme Oylaması Sonucu';
+    state.flow.lastVoteText = formatVoteResult(title, ballots, totals);
+    persistFlow();
+    byId('lastVoteResult').textContent = state.flow.lastVoteText;
+  }
+
+  function parseScoreAnswer(text, candidates, allowedRange, allowedList) {
+    const out = {};
+    const src = String(text || '').toLowerCase();
+    for (const c of candidates) {
+      const rx = new RegExp(`${c.toLowerCase()}\\s*[:=-]\\s*(-?\\d+)`);
+      const m = src.match(rx);
+      if (!m) continue;
+      const n = Number(m[1]);
+      const inRange = n >= allowedRange.min && n <= allowedRange.max;
+      const inList = !allowedList.length || allowedList.includes(n);
+      if (inRange && inList) out[c] = n;
+    }
+    return out;
+  }
+
+  async function runScoring() {
+    const q = byId('scoreQuestion')?.value?.trim();
+    const candidates = Array.from(document.querySelectorAll('[data-score-candidate]'))
+      .filter((x) => x.checked)
+      .map((x) => x.dataset.scoreCandidate);
+    if (!q || !candidates.length) return alert('Puanlama için soru ve adaylar gerekli.');
+
+    const min = Number(byId('minScore').value || 1);
+    const max = Number(byId('maxScore').value || 10);
+    const allowedList = (byId('fixedScores').value || '')
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => !Number.isNaN(n));
+
+    const totals = Object.fromEntries(candidates.map((c) => [c, 0]));
+    const lines = ['Puanlama Sonucu', ''];
+
+    for (const pid of selectedTargets()) {
+      const provider = PROVIDERS.find((p) => p.id === pid);
+      const otherCandidates = candidates.filter((c) => c !== pid);
+      const prompt = `${q}\nAdaylar: ${otherCandidates.join(', ')}\nPuan aralığı: ${min}-${max}. ${allowedList.length ? `Sadece şu puanlar: ${allowedList.join(', ')}` : ''}\nKural: sadece kime kaç puan verdiğini belirt , 10 kelimeyi geçme.`;
+      addChat(pid, 'Game Master', `[puanlama] ${q}`);
+
+      try {
+        const ans = await callProvider(provider, prompt);
+        addChat(pid, provider.label, ans);
+        const parsed = parseScoreAnswer(ans, otherCandidates, { min, max }, allowedList);
+        lines.push(`${pid}: ${Object.entries(parsed).map(([k, v]) => `${k}:${v}`).join(' | ') || 'geçersiz/boş'}`);
+        for (const [k, v] of Object.entries(parsed)) totals[k] += v;
+      } catch (e) {
+        addChat(pid, 'Sistem', `Hata: ${String(e.message || e)}`);
+        lines.push(`${pid}: hata`);
+      }
+    }
+
+    lines.push('', 'Toplamlar:');
+    for (const [k, v] of Object.entries(totals)) lines.push(`- ${k}: ${v}`);
+    state.flow.lastScoreText = lines.join('\n');
+    persistFlow();
+    byId('lastScoreResult').textContent = state.flow.lastScoreText;
+  }
+
+  function renderAdmin() {
+    const wrap = byId('providerConfig');
+    if (!wrap) return;
+    wrap.innerHTML = PROVIDERS.map((p) => {
+      const c = cfg(p.id);
+      return `
+        <article class="provider-card">
+          <h3>${p.label}</h3>
+          <label>API Key <input type="password" id="key-${p.id}" value="${escapeHtml(c.apiKey || '')}" placeholder="sk-..." /></label>
+          <label>Endpoint <input type="text" id="endpoint-${p.id}" value="${escapeHtml(c.endpoint || p.defaultEndpoint)}" /></label>
+          <label>Proxy URL (opsiyonel) <input type="text" id="proxy-${p.id}" value="${escapeHtml(c.proxyUrl || '')}" placeholder="http://localhost:3001/relay?target={url}" /></label>
+          <label>Model <input type="text" id="model-${p.id}" value="${escapeHtml(c.model || p.defaultModel)}" /></label>
+          <div class="toolbar">
+            <button data-test="${p.id}">Bağlantıyı Test Et</button>
+            <span id="status-${p.id}" class="status-pill">Bekliyor</span>
+          </div>
+        </article>`;
+    }).join('');
+
+    wrap.addEventListener('input', (e) => {
+      const id = (e.target.id || '').split('-')[1];
+      if (!id) return;
+      const item = PROVIDERS.find((x) => x.id === id);
+      state.config[id] = {
+        apiKey: byId(`key-${id}`).value.trim(),
+        endpoint: byId(`endpoint-${id}`).value.trim() || item.defaultEndpoint,
+        proxyUrl: normalizeProxyUrl(byId(`proxy-${id}`).value),
+        model: byId(`model-${id}`).value.trim() || item.defaultModel,
+      };
+      persistConfig();
+      if (e.target.id.startsWith('key-') && state.config[id].apiKey) autoConnect(id);
+    });
+
+    wrap.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-test]');
+      if (!btn) return;
+      autoConnect(btn.dataset.test);
+    });
+
+    byId('saveConfigBtn').addEventListener('click', () => {
+      for (const p of PROVIDERS) {
+        state.config[p.id] = {
+          apiKey: byId(`key-${p.id}`).value.trim(),
+          endpoint: byId(`endpoint-${p.id}`).value.trim() || p.defaultEndpoint,
+          proxyUrl: normalizeProxyUrl(byId(`proxy-${p.id}`).value),
+          model: byId(`model-${p.id}`).value.trim() || p.defaultModel,
+        };
+      }
+      persistConfig();
+      alert('Ayarlar kaydedildi.');
+    });
+
+    byId('clearConfigBtn').addEventListener('click', () => {
+      localStorage.removeItem(STORAGE_KEY);
+      location.reload();
+    });
+  }
+
+  async function autoConnect(providerId) {
+    const provider = PROVIDERS.find((p) => p.id === providerId);
+    setStatus(providerId, false, 'Bağlanıyor...');
+    try {
+      await callProvider(provider, 'Bağlantı testi: sadece OK yaz.');
+      setStatus(providerId, true, 'Bağlı');
+    } catch (e) {
+      const msg = String(e?.message || e || 'Bilinmeyen hata');
+      const pretty = msg.includes('Failed to fetch')
+        ? 'Hata: Failed to fetch (CORS/URL/Server)'
+        : `Hata: ${msg.slice(0, 42)}`;
+      setStatus(providerId, false, pretty);
+      console.error(providerId, e);
+    }
+  }
+
+  function renderTargetCheckboxes(containerId, dataAttr) {
+    const wrap = byId(containerId);
+    if (!wrap) return;
+    wrap.innerHTML = PROVIDERS.map((p) => `
+      <label class="target-chip">
+        <input type="checkbox" data-${dataAttr}="${p.id}" checked /> ${p.label}
+      </label>`).join('');
+  }
+
+  function renderPanels() {
+    const wrap = byId('modelPanels');
+    if (!wrap) return;
+    wrap.innerHTML = PROVIDERS.map((p) => {
+      const role = state.flow.roleByModel[p.id] || 'player';
+      const logs = state.flow.chats[p.id]
+        .map((m) => `<div class="msg"><div class="role">${escapeHtml(m.role)}</div>${escapeHtml(m.content)}</div>`)
+        .join('');
+      return `<article class="model-panel ${role}">
+        <div class="model-head">
+          <strong>${p.label}</strong>
+          <span>${role === 'player' ? '🟢 Oyuncu' : '🔴 Jüri'}</span>
+        </div>
+        <div class="toolbar">
+          <button data-eliminate="${p.id}">Ele</button>
+          <button data-rejoin="${p.id}">Yeniden Oyuna Al</button>
+        </div>
+        <div class="chat-log" id="log-${p.id}">${logs || '<span class="muted">Henüz mesaj yok.</span>'}</div>
+      </article>`;
+    }).join('');
+
+    wrap.querySelectorAll('[data-eliminate]').forEach((b) => b.addEventListener('click', () => {
+      state.flow.roleByModel[b.dataset.eliminate] = 'jury';
+      persistFlow();
+      renderPanels();
+    }));
+
+    wrap.querySelectorAll('[data-rejoin]').forEach((b) => b.addEventListener('click', () => {
+      state.flow.roleByModel[b.dataset.rejoin] = 'player';
+      persistFlow();
+      renderPanels();
+    }));
+  }
+
+  function renderTaskOptions() {
+    const mode = byId('taskType').value;
+    const wrap = byId('taskOptions');
+    if (mode === 'chat') {
+      wrap.innerHTML = '<p class="muted">Normal chat gönderilecek.</p>';
+      return;
+    }
+    if (mode === 'elimination' || mode === 'selection') {
+      wrap.innerHTML = `<label>Oylama Sorusu <input id="voteQuestion" type="text" placeholder="Hangi AI elensin?" /></label>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <div class="task-options">
+        <label>Min Puan <input id="minScore" type="number" value="1" /></label>
+        <label>Max Puan <input id="maxScore" type="number" value="10" /></label>
+        <label>Sabit Puanlar (örn: 1,3,5) <input id="fixedScores" type="text" placeholder="opsiyonel" /></label>
+      </div>`;
+  }
+
+  async function sendFromDock() {
+    const mode = byId('taskType').value;
+    if (mode === 'chat') {
+      await sendMasterChat();
+      return;
+    }
+    if (mode === 'elimination' || mode === 'selection') {
+      const q = byId('voteQuestion')?.value?.trim();
+      if (!q) {
+        const fallback = byId('masterPrompt')?.value?.trim();
+        if (fallback) byId('voteQuestion').value = fallback;
+      }
+      await runVote(mode);
+      return;
+    }
+
+    const q = byId('masterPrompt')?.value?.trim();
+    let hidden = byId('scoreQuestion');
+    if (!hidden) {
+      hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.id = 'scoreQuestion';
+      document.body.appendChild(hidden);
+    }
+    hidden.value = q || '';
+    await runScoring();
+  }
+
+  function renderFlow() {
+    renderTargetCheckboxes('targetCheckboxes', 'target-model');
+    renderTargetCheckboxes('voteCandidates', 'vote-candidate');
+    renderTargetCheckboxes('scoreCandidates', 'score-candidate');
+    renderPanels();
+    byId('lastVoteResult').textContent = state.flow.lastVoteText || 'Henüz oylama yok.';
+    byId('lastScoreResult').textContent = state.flow.lastScoreText || 'Henüz puanlama yok.';
+
+    renderTaskOptions();
+    byId('taskType').addEventListener('change', renderTaskOptions);
+    byId('toggleTaskMenuBtn').addEventListener('click', () => {
+      byId('taskMenu').classList.toggle('hidden');
+    });
+    byId('sendTaskBtn').addEventListener('click', sendFromDock);
+
+    byId('clearChatsBtn').addEventListener('click', () => {
+      for (const p of PROVIDERS) state.flow.chats[p.id] = [];
+      persistFlow();
+      renderPanels();
+    });
   }
 
   function escapeHtml(str) {
@@ -51,414 +542,6 @@
       .replace(/'/g, '&#39;');
   }
 
-  function formatTextWithMentions(text) {
-    const safe = escapeHtml(text);
-    return safe.replace(/(^|\s)(@[a-zA-Z0-9_.-]+)/g, '$1<span class="mention">$2</span>');
-  }
-
-  function timeAgo(ts) {
-    const diffMin = Math.max(1, Math.floor((Date.now() - ts) / 60000));
-    if (diffMin < 60) return `${diffMin}m`;
-    const h = Math.floor(diffMin / 60);
-    if (h < 24) return `${h}h`;
-    return `${Math.floor(h / 24)}d`;
-  }
-
-  function avatarFor(author) {
-    const seed = encodeURIComponent(String(author).replace('@', ''));
-    return `https://api.dicebear.com/9.x/thumbs/svg?seed=${seed}`;
-  }
-
-  function seedPosts() {
-    const now = Date.now();
-    const p1 = uid();
-    const p2 = uid();
-    return [
-      {
-        id: p1,
-        type: 'post',
-        author: '@nova.wave',
-        subMeta: 'visual rehearsal',
-        text: 'Yeni editte @mono.synth ile ortak deneme yaptık. Gece çekimi için hazır.',
-        sponsored: false,
-        media: '',
-        createdAt: now - 1000 * 60 * 12,
-        pauseMs: 2400,
-        parentId: null,
-      },
-      {
-        id: p2,
-        type: 'post',
-        author: '@arc.light',
-        subMeta: 'loop tools',
-        text: 'Bu bir tanıtım gönderisidir. @studio.pulse için yeni görsel paket çıktı.',
-        sponsored: true,
-        media: '',
-        createdAt: now - 1000 * 60 * 10,
-        pauseMs: 2800,
-        parentId: null,
-      },
-      {
-        id: uid(),
-        type: 'comment',
-        author: '@grainframe',
-        subMeta: 'studio notes',
-        text: '@nova.wave palet çok iyi duruyor.',
-        sponsored: false,
-        media: '',
-        createdAt: now - 1000 * 60 * 8,
-        pauseMs: 0,
-        parentId: p1,
-      },
-    ];
-  }
-
-  function seedSuggestions() {
-    return [
-      { id: uid(), handle: '@blue.artist', bio: 'visual performer' },
-      { id: uid(), handle: '@ghost.user', bio: 'night cuts' },
-      { id: uid(), handle: '@mono.synth', bio: 'audio textures' },
-    ];
-  }
-
-  function loadData() {
-    try {
-      state.posts = JSON.parse(localStorage.getItem(POSTS_KEY) || 'null') || seedPosts();
-    } catch {
-      state.posts = seedPosts();
-    }
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
-
-    try {
-      state.suggestions = JSON.parse(localStorage.getItem(SUGGESTIONS_KEY) || 'null') || seedSuggestions();
-    } catch {
-      state.suggestions = seedSuggestions();
-    }
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
-  }
-
-  function persistPosts() {
-    localStorage.setItem(POSTS_KEY, JSON.stringify(state.posts));
-  }
-
-  function persistSuggestions() {
-    localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(state.suggestions));
-  }
-
-  function getPosts() {
-    return state.posts.filter((x) => x.type === 'post').sort((a, b) => a.createdAt - b.createdAt);
-  }
-
-  function getCommentsFor(postId) {
-    return state.posts.filter((x) => x.type === 'comment' && x.parentId === postId).sort((a, b) => a.createdAt - b.createdAt);
-  }
-
-  function renderParentOptions() {
-    if (!el.parentPostSelect) return;
-    const options = ['<option value="">None</option>'];
-    for (const post of getPosts()) {
-      const text = escapeHtml(post.text.slice(0, 40));
-      options.push(`<option value="${post.id}">${escapeHtml(post.author)} — ${text}${post.text.length > 40 ? '…' : ''}</option>`);
-    }
-    el.parentPostSelect.innerHTML = options.join('');
-  }
-
-  function renderFeed() {
-    if (!el.feed) return;
-    const posts = getPosts();
-    if (!posts.length) {
-      el.feed.innerHTML = '<div class="empty-feed">No posts yet.</div>';
-      return;
-    }
-
-    el.feed.innerHTML = posts
-      .map((post) => {
-        const comments = getCommentsFor(post.id);
-        const media = post.media ? `<div class="media-wrap"><img class="media" src="${post.media}" alt="Attached media" /></div>` : '';
-        const commentsHtml = comments.length
-          ? `<section class="comments">${comments
-              .map((c) => `<p class="comment"><strong>${escapeHtml(c.author)}</strong> · <span class="timestamp">${timeAgo(c.createdAt)}</span><br>${formatTextWithMentions(c.text)}</p>`)
-              .join('')}</section>`
-          : '<section class="comments"></section>';
-
-        return `<article class="post-card" data-pause="${post.pauseMs || 0}">
-          <header class="post-head">
-            <img class="avatar" src="${avatarFor(post.author)}" alt="${escapeHtml(post.author)} avatar" />
-            <div>
-              <p class="meta-row"><span class="username">${escapeHtml(post.author)}</span> <span class="timestamp">· ${timeAgo(post.createdAt)}</span></p>
-              <p class="sub-meta">${escapeHtml(post.subMeta || 'music video drafts')}</p>
-            </div>
-            ${post.sponsored ? '<span class="sponsored-label">Sponsored</span>' : ''}
-          </header>
-          <p class="post-text">${formatTextWithMentions(post.text)}</p>
-          ${media}
-          <footer class="post-actions" aria-hidden="true">
-            <span>♡ ${Math.floor(Math.random() * 900 + 25)}</span>
-            <span>💬 ${comments.length}</span>
-            <span>↺ ${Math.floor(Math.random() * 70 + 3)}</span>
-          </footer>
-          ${commentsHtml}
-        </article>`;
-      })
-      .join('');
-  }
-
-  function renderManageList() {
-    if (!el.manageList) return;
-    const sorted = [...state.posts].sort((a, b) => b.createdAt - a.createdAt);
-    el.manageList.innerHTML = sorted
-      .map((item) => `<div class="manage-item">
-        <div>
-          <p><strong>${escapeHtml(item.author)}</strong> · <span>${item.type.toUpperCase()}</span> · <small>${timeAgo(item.createdAt)}</small></p>
-          <small>${escapeHtml(item.text.slice(0, 80))}${item.text.length > 80 ? '…' : ''}</small>
-        </div>
-        <button class="delete-btn" type="button" data-delete-post-id="${item.id}">Delete</button>
-      </div>`)
-      .join('');
-  }
-
-  function renderSuggestions() {
-    if (!el.suggestionsList) return;
-    const query = (el.searchInput?.value || '').trim().toLowerCase();
-    const list = state.suggestions.filter((s) =>
-      !query || s.handle.toLowerCase().includes(query) || s.bio.toLowerCase().includes(query)
-    );
-
-    el.suggestionsList.innerHTML = list
-      .map((s) => `<article class="suggestion-item">
-        <img src="${avatarFor(s.handle)}" alt="${escapeHtml(s.handle)} avatar" class="avatar mini" />
-        <div>
-          <p><strong>${escapeHtml(s.handle)}</strong></p>
-          <small>${escapeHtml(s.bio)}</small>
-        </div>
-        <button type="button">Takip et</button>
-      </article>`)
-      .join('');
-  }
-
-  function renderSuggestionManager() {
-    if (!el.suggestionManageList) return;
-    el.suggestionManageList.innerHTML = state.suggestions
-      .map((s) => `<div class="manage-item">
-        <div>
-          <p><strong>${escapeHtml(s.handle)}</strong></p>
-          <small>${escapeHtml(s.bio)}</small>
-        </div>
-        <button class="delete-btn" type="button" data-delete-suggestion-id="${s.id}">Delete</button>
-      </div>`)
-      .join('');
-  }
-
-  function refresh() {
-    renderParentOptions();
-    renderFeed();
-    renderManageList();
-    renderSuggestions();
-    renderSuggestionManager();
-  }
-
-  function toDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      if (!file) {
-        resolve('');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function onPublish(event) {
-    event.preventDefault();
-    const text = el.postText.value.trim();
-    if (!text) return;
-
-    const type = el.postType.value;
-    const parentId = type === 'comment' ? el.parentPostSelect.value || null : null;
-    if (type === 'comment' && !parentId) {
-      alert('Please select a parent post for comments.');
-      return;
-    }
-
-    const media = await toDataUrl(el.mediaFile.files?.[0] || null);
-
-    state.posts.push({
-      id: uid(),
-      type,
-      author: (el.authorHandle.value.trim() || '@studio.pulse').replace(/\s+/g, ''),
-      subMeta: el.authorSubMeta.value.trim() || 'music video draft',
-      text,
-      sponsored: Boolean(el.isSponsored.checked),
-      media,
-      createdAt: Date.now(),
-      pauseMs: type === 'post' ? 2200 : 0,
-      parentId,
-    });
-
-    persistPosts();
-    refresh();
-
-    el.form.reset();
-    el.authorHandle.value = '@studio.pulse';
-    el.authorSubMeta.value = 'music video draft';
-  }
-
-  function deletePostOrComment(id) {
-    const item = state.posts.find((x) => x.id === id);
-    if (!item) return;
-
-    if (item.type === 'post') {
-      state.posts = state.posts.filter((x) => x.id !== id && x.parentId !== id);
-    } else {
-      state.posts = state.posts.filter((x) => x.id !== id);
-    }
-
-    persistPosts();
-    refresh();
-  }
-
-  function onAddSuggestion(event) {
-    event.preventDefault();
-    const handle = el.suggestionHandle.value.trim();
-    const bio = el.suggestionBio.value.trim();
-    if (!handle || !bio) return;
-
-    const normalized = handle.startsWith('@') ? handle : `@${handle}`;
-    state.suggestions.unshift({ id: uid(), handle: normalized, bio });
-    persistSuggestions();
-    renderSuggestions();
-    renderSuggestionManager();
-    el.suggestionForm.reset();
-  }
-
-  function deleteSuggestion(id) {
-    state.suggestions = state.suggestions.filter((x) => x.id !== id);
-    persistSuggestions();
-    renderSuggestions();
-    renderSuggestionManager();
-  }
-
-  function maybePauseAtPost(now) {
-    if (!state.pauseAtPosts || page !== 'feed') return;
-
-    const cards = Array.from(document.querySelectorAll('.post-card'));
-    for (const card of cards) {
-      if (card.dataset.paused === '1') continue;
-      const pauseMs = Number(card.dataset.pause || 0);
-      if (!pauseMs) continue;
-      const rect = card.getBoundingClientRect();
-      if (rect.top >= 70 && rect.top <= 160) {
-        card.dataset.paused = '1';
-        state.isPaused = true;
-        state.pauseUntil = now + pauseMs;
-        break;
-      }
-    }
-  }
-
-  function maybeResetLoop() {
-    if (state.loopResetPending || page !== 'feed') return;
-    const nearEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
-    if (!nearEnd) return;
-
-    state.loopResetPending = true;
-    window.setTimeout(() => {
-      document.querySelectorAll('.post-card').forEach((card) => delete card.dataset.paused);
-      window.scrollTo({ top: 0, behavior: 'auto' });
-      state.loopResetPending = false;
-    }, 900);
-  }
-
-  function tick(now) {
-    if (page !== 'feed' || !state.autoScroll) {
-      state.lastTime = now;
-      requestAnimationFrame(tick);
-      return;
-    }
-
-    maybeResetLoop();
-
-    if (state.isPaused) {
-      if (now >= state.pauseUntil) state.isPaused = false;
-      state.lastTime = now;
-      requestAnimationFrame(tick);
-      return;
-    }
-
-    const delta = (now - state.lastTime) / 1000;
-    window.scrollBy(0, state.speedPxPerSecond * delta);
-    maybePauseAtPost(now);
-    state.lastTime = now;
-    requestAnimationFrame(tick);
-  }
-
-  function bindEvents() {
-    if (el.postType && el.parentPostSelect) {
-      el.postType.addEventListener('change', () => {
-        el.parentPostSelect.disabled = el.postType.value !== 'comment';
-      });
-      el.parentPostSelect.disabled = true;
-    }
-
-    if (el.form) {
-      el.form.addEventListener('submit', onPublish);
-    }
-
-    if (el.manageList) {
-      el.manageList.addEventListener('click', (event) => {
-        const btn = event.target.closest('[data-delete-post-id]');
-        if (!btn) return;
-        deletePostOrComment(btn.getAttribute('data-delete-post-id'));
-      });
-    }
-
-    if (el.suggestionForm) {
-      el.suggestionForm.addEventListener('submit', onAddSuggestion);
-    }
-
-    if (el.suggestionManageList) {
-      el.suggestionManageList.addEventListener('click', (event) => {
-        const btn = event.target.closest('[data-delete-suggestion-id]');
-        if (!btn) return;
-        deleteSuggestion(btn.getAttribute('data-delete-suggestion-id'));
-      });
-    }
-
-    if (el.searchInput) {
-      el.searchInput.addEventListener('input', renderSuggestions);
-    }
-
-    if (el.autoScrollEnabled) {
-      el.autoScrollEnabled.addEventListener('change', () => {
-        state.autoScroll = el.autoScrollEnabled.checked;
-      });
-    }
-
-    if (el.pauseAtPosts) {
-      el.pauseAtPosts.addEventListener('change', () => {
-        state.pauseAtPosts = el.pauseAtPosts.checked;
-      });
-    }
-
-    if (el.scrollSpeed) {
-      el.scrollSpeed.addEventListener('input', () => {
-        state.speedPxPerSecond = Number(el.scrollSpeed.value);
-      });
-    }
-  }
-
-  function init() {
-    loadData();
-    refresh();
-    bindEvents();
-
-    requestAnimationFrame((start) => {
-      state.lastTime = start;
-      requestAnimationFrame(tick);
-    });
-  }
-
-  init();
+  if (page === 'admin') renderAdmin();
+  if (page === 'feed') renderFlow();
 })();
