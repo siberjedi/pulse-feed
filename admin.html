@@ -1,126 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse Admin</title>
+  <title>AI Survivor · Admin</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body data-page="admin">
-  <div class="layout">
-    <aside class="sidebar left-sidebar" aria-label="Navigation">
-      <div class="left-brand">
-        <img src="PulseWhite.svg" alt="Pulse logo" class="left-brand-logo" />
-        <h2>Pulse</h2>
+  <main class="container">
+    <header class="app-header">
+      <h1>AI Survivor · Admin Paneli</h1>
+      <a class="link-btn" href="feed.html">Akış / Game Master</a>
+    </header>
+
+    <section class="card">
+      <h2>API Bağlantıları</h2>
+      <p class="muted">API key girildiğinde otomatik test bağlantısı yapılır. Ayarlar bu tarayıcıda localStorage'a kaydedilir.</p>
+      <div id="providerConfig" class="provider-grid"></div>
+      <div class="toolbar">
+        <button id="saveConfigBtn" class="primary">Ayarları Kaydet</button>
+        <button id="clearConfigBtn">Tüm API Ayarlarını Sil</button>
       </div>
+    </section>
 
-      <nav class="menu" aria-label="Main menu">
-        <a href="feed.html">Anasayfa</a>
-        <a href="feed.html">Keşfet</a>
-        <a href="feed.html">Bildirimler</a>
-        <a href="feed.html">Mesajlar</a>
-        <a href="feed.html">Premium $</a>
-      </nav>
-    </aside>
-
-    <main class="app-shell">
-      <header class="top-bar">
-        <div class="brand">
-          <img src="PulseWhite.svg" alt="Pulse logo" class="brand-logo" />
-          <h1>Pulse</h1>
-        </div>
-        <div class="mode-switch" role="tablist" aria-label="Mode switch">
-          <a href="admin.html" class="tab-btn active">Composer / Admin</a>
-          <a href="feed.html" class="tab-btn">Feed</a>
-        </div>
-      </header>
-
-      <section class="panel" aria-label="Composer and admin mode">
-        <h2>Create content</h2>
-        <form id="composerForm" class="composer-form">
-          <label>
-            Post text
-            <textarea id="postText" rows="4" placeholder="Write a post or comment..." required></textarea>
-          </label>
-
-          <div class="form-row">
-            <label>
-              Post type
-              <select id="postType">
-                <option value="post">Post</option>
-                <option value="comment">Comment</option>
-              </select>
-            </label>
-
-            <label>
-              Parent post (for comments)
-              <select id="parentPostSelect">
-                <option value="">None</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="form-row">
-            <label>
-              Image / GIF / video thumbnail
-              <input id="mediaFile" type="file" accept="image/*,video/*" />
-            </label>
-
-            <label class="checkbox-line">
-              <input id="isSponsored" type="checkbox" />
-              Mark as Sponsored
-            </label>
-          </div>
-
-          <div class="form-row">
-            <label>
-              Author handle
-              <input id="authorHandle" type="text" value="@studio.pulse" />
-            </label>
-
-            <label>
-              Header line
-              <input id="authorSubMeta" type="text" value="music video draft" />
-            </label>
-          </div>
-
-          <button class="publish-btn" type="submit">Publish</button>
-        </form>
-
-        <section class="manager" aria-label="Content manager">
-          <h2>Manage posts & comments</h2>
-          <div id="manageList" class="manage-list"></div>
-        </section>
-
-        <section class="manager" aria-label="Suggestion manager">
-          <h2>Manage follow suggestions</h2>
-          <form id="suggestionForm" class="composer-form compact">
-            <div class="form-row">
-              <label>
-                Handle
-                <input id="suggestionHandle" type="text" placeholder="@new.creator" required />
-              </label>
-              <label>
-                Bio
-                <input id="suggestionBio" type="text" placeholder="short bio" required />
-              </label>
-            </div>
-            <button class="publish-btn" type="submit">Add suggestion</button>
-          </form>
-          <div id="suggestionManageList" class="manage-list"></div>
-        </section>
-      </section>
-    </main>
-
-    <aside class="sidebar right-sidebar" aria-label="Discover and follow">
-      <input id="searchInput" type="text" placeholder="Ara..." class="search-input" />
-      <section class="suggestions">
-        <h3>Takip önerileri</h3>
-        <div id="suggestionsList"></div>
-      </section>
-    </aside>
-  </div>
-
+    <section class="card">
+      <h2>Notlar</h2>
+      <ul>
+        <li>Varsayılan endpoint'ler ön-yüklüdür; gerekirse değiştirebilirsiniz.</li>
+        <li>Llama için sağlayıcınız farklıysa endpoint + model'i kendi servisinize göre güncelleyin.</li>
+        <li>Demo sürümde CORS/politika nedeniyle bazı API'ler tarayıcıdan direkt çağrıda hata verebilir.</li>
+      </ul>
+    </section>
+  </main>
   <script src="script.js"></script>
 </body>
 </html>
