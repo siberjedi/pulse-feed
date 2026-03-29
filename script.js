@@ -117,16 +117,14 @@
         method: 'POST',
         signal,
         headers: {
-          'Content-Type': 'application/json',
+          'content-type': 'application/json',
           'x-api-key': c.apiKey,
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
           model: c.model,
-          max_tokens: 1200,
-          temperature: 1,
-          thinking: { type: 'disabled' },
-          messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: prompt }],
         }),
       });
       if (!res.ok) throw new Error(await safeErr(res));

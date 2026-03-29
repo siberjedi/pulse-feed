@@ -27,7 +27,8 @@
       <h2>Notlar</h2>
       <ul>
         <li>Varsayılan endpoint'ler ön-yüklüdür; gerekirse değiştirebilirsiniz.</li>
-        <li>Claude için öneri: <code>https://api.anthropic.com/v1/messages</code> + <code>claude-sonnet-4-5-20250929</code>.</li>
+        <li>Claude için öneri: <code>https://api.anthropic.com/v1/messages</code> + destekli bir model adı (örn <code>claude-3-5-sonnet-20241022</code>).</li>
+        <li>Claude isteklerinde <code>x-api-key</code>, <code>anthropic-version</code> ve <code>max_tokens</code> zorunludur (kodda uygulanır).</li>
         <li>Grok için öneri: <code>https://api.x.ai/v1/responses</code> + <code>grok-4.20-reasoning</code>.</li>
         <li>Llama için sağlayıcınız farklıysa endpoint + model'i kendi servisinize göre güncelleyin.</li>
         <li>Demo sürümde CORS/politika nedeniyle bazı API'ler tarayıcıdan direkt çağrıda hata verebilir.</li>
