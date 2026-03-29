@@ -343,7 +343,7 @@
           <h3>${p.label}</h3>
           <label>API Key <input type="password" id="key-${p.id}" value="${escapeHtml(c.apiKey || '')}" placeholder="sk-..." /></label>
           <label>Endpoint <input type="text" id="endpoint-${p.id}" value="${escapeHtml(c.endpoint || p.defaultEndpoint)}" /></label>
-          <label>Proxy URL (opsiyonel) <input type="text" id="proxy-${p.id}" value="${escapeHtml(c.proxyUrl || '')}" placeholder="https://proxy.example.com/relay?url={url}" /></label>
+          <label>Proxy URL (opsiyonel) <input type="text" id="proxy-${p.id}" value="${escapeHtml(c.proxyUrl || '')}" placeholder="http://localhost:3001/relay?target={url}" /></label>
           <label>Model <input type="text" id="model-${p.id}" value="${escapeHtml(c.model || p.defaultModel)}" /></label>
           <div class="toolbar">
             <button data-test="${p.id}">Bağlantıyı Test Et</button>
