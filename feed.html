@@ -7,65 +7,66 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body data-page="feed">
-  <main class="container flow-container">
-    <header class="app-header">
-      <h1>AI Survivor · Game Master</h1>
-      <a class="link-btn" href="admin.html">Admin Paneli</a>
-    </header>
-
-    <section class="card">
-      <h2>Game Master Chat</h2>
-      <div id="targetCheckboxes" class="target-list"></div>
-      <label>
-        Mesaj
-        <textarea id="masterPrompt" rows="3" placeholder="Mesajını yaz..."></textarea>
-      </label>
-      <div class="toolbar">
-        <button id="sendChatBtn" class="primary">Seçili AI'lara Gönder</button>
-        <button id="clearChatsBtn">Chat Geçmişlerini Temizle</button>
-      </div>
-      <p class="muted">Sistem otomatik ekler: <strong>"100 kelimeyi aşmayacak cevap ver"</strong>.</p>
-    </section>
-
-    <section class="card">
-      <h2>Eliminasyon & Belirleme Oylaması</h2>
-      <label>Oylama Sorusu <input id="voteQuestion" type="text" placeholder="Hangi AI elensin?" /></label>
-      <div>
-        <strong>Adaylar</strong>
-        <div id="voteCandidates" class="target-list"></div>
-      </div>
-      <div class="toolbar">
-        <button id="runEliminationBtn" class="danger">Eleme Oylaması Çalıştır</button>
-        <button id="runSelectionBtn">Belirleme Oylaması Çalıştır</button>
-      </div>
-      <p class="muted">Sistem otomatik ekler: <strong>"sadece tek kelime ile cevap ver"</strong>.</p>
-    </section>
-
-    <section class="card">
-      <h2>Puanlama</h2>
-      <label>Soru <input id="scoreQuestion" type="text" placeholder="Kim en tutarlı cevap verdi?" /></label>
-      <div>
-        <strong>Adaylar</strong>
-        <div id="scoreCandidates" class="target-list"></div>
-      </div>
-      <div class="score-grid">
-        <label>Min Puan <input id="minScore" type="number" value="1" /></label>
-        <label>Max Puan <input id="maxScore" type="number" value="10" /></label>
-        <label>Veya Sabit Puanlar (örn: 1,3,5)
-          <input id="fixedScores" type="text" placeholder="opsiyonel" />
-        </label>
-      </div>
-      <button id="runScoreBtn" class="primary">Puanlama Çalıştır</button>
-      <p class="muted">Sistem otomatik ekler: <strong>"sadece kime kaç puan verdiğini belirt , 10 kelimeyi geçme"</strong>.</p>
-    </section>
-
-    <section class="grid-5" id="modelPanels"></section>
-
-    <aside class="card sticky-results">
-      <h2>Son Oylama Sonuçları</h2>
+  <main class="flow-shell">
+    <aside class="fixed-side left-side card">
+      <h3>Son Oylama</h3>
       <div id="lastVoteResult" class="result-box">Henüz oylama yok.</div>
-      <h2>Son Puanlama Sonuçları</h2>
+      <h3>Son Puanlama</h3>
       <div id="lastScoreResult" class="result-box">Henüz puanlama yok.</div>
+    </aside>
+
+    <section class="center-stage">
+      <header class="app-header center-head">
+        <h1>AI Survivor · Game Master</h1>
+        <a class="link-btn" href="admin.html">Admin Paneli</a>
+      </header>
+
+      <section class="card ai-board-wrap">
+        <div class="board-title-row">
+          <h2>AI Panelleri</h2>
+          <div id="targetCheckboxes" class="target-list"></div>
+        </div>
+        <section class="grid-5" id="modelPanels"></section>
+      </section>
+
+      <section class="card chat-dock">
+        <div class="dock-head">
+          <strong>Game Master Chat</strong>
+          <button id="toggleTaskMenuBtn">Görev Menüsü ▾</button>
+        </div>
+
+        <div id="taskMenu" class="task-menu hidden">
+          <label>Görev Türü
+            <select id="taskType">
+              <option value="chat">Normal Chat</option>
+              <option value="elimination">Eleme Oylaması</option>
+              <option value="selection">Belirleme Oylaması</option>
+              <option value="scoring">Puanlama</option>
+            </select>
+          </label>
+
+          <div id="taskOptions" class="task-options"></div>
+        </div>
+
+        <label>
+          Mesaj / Soru
+          <textarea id="masterPrompt" rows="2" placeholder="Mesajını yaz..."></textarea>
+        </label>
+        <div class="toolbar">
+          <button id="sendTaskBtn" class="primary">Gönder</button>
+          <button id="clearChatsBtn">Chat Geçmişlerini Temizle</button>
+        </div>
+        <p class="muted">Chat: 100 kelime sınırı · Oylama: tek kelime · Puanlama: 10 kelime sınırı otomatik eklenir.</p>
+      </section>
+    </section>
+
+    <aside class="fixed-side right-side card">
+      <h3>Aday Seçimi</h3>
+      <p class="muted">Bu seçimler oylama/puanlamada kullanılır.</p>
+      <strong>Oylama Adayları</strong>
+      <div id="voteCandidates" class="target-list stacked"></div>
+      <strong>Puanlama Adayları</strong>
+      <div id="scoreCandidates" class="target-list stacked"></div>
     </aside>
   </main>
   <script src="script.js"></script>

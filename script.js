@@ -362,7 +362,10 @@
       setStatus(providerId, true, 'Bağlı');
     } catch (e) {
       const msg = String(e?.message || e || 'Bilinmeyen hata');
-      setStatus(providerId, false, `Hata: ${msg.slice(0, 42)}`);
+      const pretty = msg.includes('Failed to fetch')
+        ? 'Hata: Failed to fetch (muhtemel CORS)'
+        : `Hata: ${msg.slice(0, 42)}`;
+      setStatus(providerId, false, pretty);
       console.error(providerId, e);
     }
   }
@@ -410,6 +413,53 @@
     }));
   }
 
+  function renderTaskOptions() {
+    const mode = byId('taskType').value;
+    const wrap = byId('taskOptions');
+    if (mode === 'chat') {
+      wrap.innerHTML = '<p class="muted">Normal chat gönderilecek.</p>';
+      return;
+    }
+    if (mode === 'elimination' || mode === 'selection') {
+      wrap.innerHTML = `<label>Oylama Sorusu <input id="voteQuestion" type="text" placeholder="Hangi AI elensin?" /></label>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <div class="task-options">
+        <label>Min Puan <input id="minScore" type="number" value="1" /></label>
+        <label>Max Puan <input id="maxScore" type="number" value="10" /></label>
+        <label>Sabit Puanlar (örn: 1,3,5) <input id="fixedScores" type="text" placeholder="opsiyonel" /></label>
+      </div>`;
+  }
+
+  async function sendFromDock() {
+    const mode = byId('taskType').value;
+    if (mode === 'chat') {
+      await sendMasterChat();
+      return;
+    }
+    if (mode === 'elimination' || mode === 'selection') {
+      const q = byId('voteQuestion')?.value?.trim();
+      if (!q) {
+        const fallback = byId('masterPrompt')?.value?.trim();
+        if (fallback) byId('voteQuestion').value = fallback;
+      }
+      await runVote(mode);
+      return;
+    }
+
+    const q = byId('masterPrompt')?.value?.trim();
+    let hidden = byId('scoreQuestion');
+    if (!hidden) {
+      hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.id = 'scoreQuestion';
+      document.body.appendChild(hidden);
+    }
+    hidden.value = q || '';
+    await runScoring();
+  }
+
   function renderFlow() {
     renderTargetCheckboxes('targetCheckboxes', 'target-model');
     renderTargetCheckboxes('voteCandidates', 'vote-candidate');
@@ -418,10 +468,13 @@
     byId('lastVoteResult').textContent = state.flow.lastVoteText || 'Henüz oylama yok.';
     byId('lastScoreResult').textContent = state.flow.lastScoreText || 'Henüz puanlama yok.';
 
-    byId('sendChatBtn').addEventListener('click', sendMasterChat);
-    byId('runEliminationBtn').addEventListener('click', () => runVote('elimination'));
-    byId('runSelectionBtn').addEventListener('click', () => runVote('selection'));
-    byId('runScoreBtn').addEventListener('click', runScoring);
+    renderTaskOptions();
+    byId('taskType').addEventListener('change', renderTaskOptions);
+    byId('toggleTaskMenuBtn').addEventListener('click', () => {
+      byId('taskMenu').classList.toggle('hidden');
+    });
+    byId('sendTaskBtn').addEventListener('click', sendFromDock);
+
     byId('clearChatsBtn').addEventListener('click', () => {
       for (const p of PROVIDERS) state.flow.chats[p.id] = [];
       persistFlow();
