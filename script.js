@@ -2,8 +2,8 @@
   const PROVIDERS = [
     { id: 'gpt', label: '🤖 GPT', defaultEndpoint: 'https://api.openai.com/v1/chat/completions', defaultModel: 'gpt-4o-mini', apiType: 'openai' },
     { id: 'gemini', label: '✨ Gemini', defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', defaultModel: 'gemini-1.5-flash', apiType: 'gemini' },
-    { id: 'claude', label: '🧠 Claude', defaultEndpoint: 'https://api.anthropic.com/v1/messages', defaultModel: 'claude-3-5-sonnet-latest', apiType: 'anthropic' },
-    { id: 'grok', label: '⚡ Grok', defaultEndpoint: 'https://api.x.ai/v1/chat/completions', defaultModel: 'grok-2-latest', apiType: 'openai' },
+    { id: 'claude', label: '🧠 Claude', defaultEndpoint: 'https://api.anthropic.com/v1/messages', defaultModel: 'claude-sonnet-4-5-20250929', apiType: 'anthropic' },
+    { id: 'grok', label: '⚡ Grok', defaultEndpoint: 'https://api.x.ai/v1/responses', defaultModel: 'grok-4.20-reasoning', apiType: 'xai-responses' },
     { id: 'llama', label: '🦙 Llama', defaultEndpoint: 'https://api.openai.com/v1/chat/completions', defaultModel: 'meta-llama/llama-3.1-70b-instruct', apiType: 'openai' },
   ];
 
@@ -104,14 +104,43 @@
         },
         body: JSON.stringify({
           model: c.model,
-          max_tokens: 400,
-          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 1200,
+          temperature: 1,
+          thinking: { type: 'disabled' },
+          messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
         }),
       });
       if (!res.ok) throw new Error(await safeErr(res));
       const data = await res.json();
       const textBlocks = (data?.content || []).filter((x) => x.type === 'text').map((x) => x.text);
       return textBlocks.join('\n').trim() || '(boş cevap)';
+    }
+
+    if (provider.apiType === 'xai-responses') {
+      const res = await fetch(c.endpoint, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${c.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: c.model,
+          input: [
+            { role: 'system', content: 'You are a helpful AI assistant.' },
+            { role: 'user', content: prompt },
+          ],
+        }),
+      });
+      if (!res.ok) throw new Error(await safeErr(res));
+      const data = await res.json();
+      const outputText = data?.output_text
+        || (data?.output || [])
+          .flatMap((item) => item?.content || [])
+          .filter((c) => c?.type === 'output_text' || c?.type === 'text')
+          .map((c) => c?.text || '')
+          .join('\n');
+      return String(outputText || '').trim() || '(boş cevap)';
     }
 
     throw new Error('Desteklenmeyen provider tipi');
@@ -332,7 +361,8 @@
       await callProvider(provider, 'Bağlantı testi: sadece OK yaz.');
       setStatus(providerId, true, 'Bağlı');
     } catch (e) {
-      setStatus(providerId, false, `Hata`);
+      const msg = String(e?.message || e || 'Bilinmeyen hata');
+      setStatus(providerId, false, `Hata: ${msg.slice(0, 42)}`);
       console.error(providerId, e);
     }
   }
