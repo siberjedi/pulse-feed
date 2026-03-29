@@ -56,6 +56,20 @@
     return `${cleanedProxy}${joiner}target=${encodeURIComponent(rawEndpoint)}`;
   }
 
+
+  function normalizeProxyUrl(raw) {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    if (value.includes('/api/users')) {
+      try {
+        const u = new URL(value);
+        return `${u.origin}/relay?target={url}`;
+      } catch {
+        return 'http://localhost:3001/relay?target={url}';
+      }
+    }
+    return value;
+  }
   function validateEndpointForBrowser(endpoint) {
     if (location.protocol === 'https:' && String(endpoint).startsWith('http://')) {
       throw new Error('Mixed content: HTTPS sayfada HTTP endpoint kullanılamaz');
@@ -359,7 +373,7 @@
       state.config[id] = {
         apiKey: byId(`key-${id}`).value.trim(),
         endpoint: byId(`endpoint-${id}`).value.trim() || item.defaultEndpoint,
-        proxyUrl: byId(`proxy-${id}`).value.trim(),
+        proxyUrl: normalizeProxyUrl(byId(`proxy-${id}`).value),
         model: byId(`model-${id}`).value.trim() || item.defaultModel,
       };
       persistConfig();
@@ -377,7 +391,7 @@
         state.config[p.id] = {
           apiKey: byId(`key-${p.id}`).value.trim(),
           endpoint: byId(`endpoint-${p.id}`).value.trim() || p.defaultEndpoint,
-          proxyUrl: byId(`proxy-${p.id}`).value.trim(),
+          proxyUrl: normalizeProxyUrl(byId(`proxy-${p.id}`).value),
           model: byId(`model-${p.id}`).value.trim() || p.defaultModel,
         };
       }
