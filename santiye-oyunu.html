@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Şantiye Patronu - Etkinlik Akışı</title>
+  <link rel="stylesheet" href="santiye-oyunu.css" />
+</head>
+<body>
+  <main class="app">
+    <section class="screen active" id="screen-intro">
+      <img id="introImage" class="hero-image" src="assets/Giriş.JPG" alt="Giriş görseli" />
+      <button class="btn btn-xl" data-next="setup">Başla</button>
+    </section>
+
+    <section class="screen" id="screen-setup">
+      <h1>Oyun Ayarları</h1>
+      <div class="form-grid">
+        <label>Grup Sayısı
+          <select id="groupCountSelect">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+          </select>
+        </label>
+        <label>Başlangıç Parası
+          <input id="startingCapitalInput" type="number" min="0" step="100" value="5000" />
+        </label>
+      </div>
+      <button class="btn" id="toNamesBtn">Devam</button>
+    </section>
+
+    <section class="screen" id="screen-names">
+      <h1>Grup İsimleri</h1>
+      <div id="groupNameInputs" class="form-stack"></div>
+      <button class="btn" id="toInfoBtn">Devam</button>
+    </section>
+
+    <section class="screen" id="screen-info">
+      <article class="info-slide active" data-index="0">
+        <h2>Şantiye Patronu Oyununa Hoşgeldiniz.</h2>
+      </article>
+      <article class="info-slide" data-index="1">
+        <h2>Göreviniz Verilen İhale Dosyalarındaki Görevleri Tamamlamak.</h2>
+        <img class="info-media" id="infoTaskExample" src="" alt="Örnek görev kartı" />
+      </article>
+      <article class="info-slide" data-index="2">
+        <h2>İhaleyi Tamamlamanız İçin Doğru İşçiyi ve Doğru Makineyi Kullanmalı ve En Yüksek Kasa Miktarına Ulaşmalısınız.</h2>
+        <div class="row">
+          <img class="info-media" id="infoWorkerExample" src="" alt="Örnek işçi kartı" />
+          <img class="info-media" id="infoMachineExample" src="" alt="Örnek makine kartı" />
+        </div>
+      </article>
+      <article class="info-slide" data-index="3">
+        <h2>İlk İhale Görevi Haricinde Diğer Turların Başında Birer Şans Kartı Oyuna Etki Edecektir. Oyuncular Bu Etkiyi Göz Önünde Bulundurarak Görevi Tamamlamalıdır.</h2>
+        <img class="info-media" id="infoChanceExample" src="" alt="Örnek şans kartı" />
+      </article>
+      <div class="actions">
+        <button class="btn secondary" id="infoPrevBtn">Önceki</button>
+        <button class="btn" id="infoNextBtn">Sonraki</button>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-round-flow">
+      <h1 id="roundTitle">1. Görev</h1>
+      <div id="chanceAnimation" class="chance-anim hidden"></div>
+      <div id="selectedChanceCard" class="selected-chance hidden"></div>
+      <button class="btn" id="toTaskBtn">Görev Kartlarını Göster</button>
+    </section>
+
+    <section class="screen" id="screen-task">
+      <h1>İhaleyi Seç</h1>
+      <div id="taskCards" class="cards"></div>
+      <div id="chancePinned" class="chance-pinned"></div>
+      <div id="capitalsBoard" class="chance-pinned"></div>
+      <p id="hireText">İşçini ve Makineni Kirala</p>
+      <p id="taskTimer" class="timer">03:00</p>
+      <button class="btn" id="toScoreBtn">Süreyi Bitir ve Hesaplamaya Geç</button>
+      <div id="overlayCountdown" class="overlay-countdown hidden"></div>
+    </section>
+
+    <section class="screen" id="screen-score">
+      <h1 id="scoreTitle">1. Görev - Puan Hesaplama</h1>
+      <div id="groupScoreForms" class="form-stack"></div>
+      <button class="btn" id="calculateBtn">Hesapla</button>
+      <div id="scoreResults" class="results"></div>
+      <button class="btn hidden" id="nextRoundBtn">Sonraki Görev</button>
+    </section>
+
+    <section class="screen" id="screen-final">
+      <h1>Final Sonuçları</h1>
+      <div id="finalResults"></div>
+      <button class="btn" id="restartBtn">Yeniden Başlat</button>
+    </section>
+  </main>
+
+  <script src="santiye-oyunu.js"></script>
+</body>
+</html>
