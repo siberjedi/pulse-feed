@@ -44,6 +44,23 @@
     return state.config[providerId] || {};
   }
 
+
+  function resolveEndpoint(rawEndpoint, proxyUrl) {
+    if (!proxyUrl) return rawEndpoint;
+    const cleanedProxy = proxyUrl.trim();
+    if (!cleanedProxy) return rawEndpoint;
+    if (cleanedProxy.includes('{url}')) {
+      return cleanedProxy.replace('{url}', encodeURIComponent(rawEndpoint));
+    }
+    const joiner = cleanedProxy.includes('?') ? '&' : '?';
+    return `${cleanedProxy}${joiner}target=${encodeURIComponent(rawEndpoint)}`;
+  }
+
+  function validateEndpointForBrowser(endpoint) {
+    if (location.protocol === 'https:' && String(endpoint).startsWith('http://')) {
+      throw new Error('Mixed content: HTTPS sayfada HTTP endpoint kullanılamaz');
+    }
+  }
   function setStatus(providerId, ok, text) {
     const el = byId(`status-${providerId}`);
     if (!el) return;
@@ -58,8 +75,10 @@
     }
 
     const signal = opts.signal;
+    const endpoint = resolveEndpoint(c.endpoint, c.proxyUrl);
+    validateEndpointForBrowser(endpoint);
     if (provider.apiType === 'openai') {
-      const res = await fetch(c.endpoint, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         signal,
         headers: {
@@ -78,7 +97,7 @@
     }
 
     if (provider.apiType === 'gemini') {
-      const url = `${c.endpoint}${c.endpoint.includes('?') ? '&' : '?'}key=${encodeURIComponent(c.apiKey)}`;
+      const url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}key=${encodeURIComponent(c.apiKey)}`;
       const res = await fetch(url, {
         method: 'POST',
         signal,
@@ -94,7 +113,7 @@
     }
 
     if (provider.apiType === 'anthropic') {
-      const res = await fetch(c.endpoint, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         signal,
         headers: {
@@ -117,7 +136,7 @@
     }
 
     if (provider.apiType === 'xai-responses') {
-      const res = await fetch(c.endpoint, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         signal,
         headers: {
@@ -309,6 +328,7 @@
           <h3>${p.label}</h3>
           <label>API Key <input type="password" id="key-${p.id}" value="${escapeHtml(c.apiKey || '')}" placeholder="sk-..." /></label>
           <label>Endpoint <input type="text" id="endpoint-${p.id}" value="${escapeHtml(c.endpoint || p.defaultEndpoint)}" /></label>
+          <label>Proxy URL (opsiyonel) <input type="text" id="proxy-${p.id}" value="${escapeHtml(c.proxyUrl || '')}" placeholder="https://proxy.example.com/relay?url={url}" /></label>
           <label>Model <input type="text" id="model-${p.id}" value="${escapeHtml(c.model || p.defaultModel)}" /></label>
           <div class="toolbar">
             <button data-test="${p.id}">Bağlantıyı Test Et</button>
@@ -324,6 +344,7 @@
       state.config[id] = {
         apiKey: byId(`key-${id}`).value.trim(),
         endpoint: byId(`endpoint-${id}`).value.trim() || item.defaultEndpoint,
+        proxyUrl: byId(`proxy-${id}`).value.trim(),
         model: byId(`model-${id}`).value.trim() || item.defaultModel,
       };
       persistConfig();
@@ -341,6 +362,7 @@
         state.config[p.id] = {
           apiKey: byId(`key-${p.id}`).value.trim(),
           endpoint: byId(`endpoint-${p.id}`).value.trim() || p.defaultEndpoint,
+          proxyUrl: byId(`proxy-${p.id}`).value.trim(),
           model: byId(`model-${p.id}`).value.trim() || p.defaultModel,
         };
       }
@@ -363,7 +385,7 @@
     } catch (e) {
       const msg = String(e?.message || e || 'Bilinmeyen hata');
       const pretty = msg.includes('Failed to fetch')
-        ? 'Hata: Failed to fetch (muhtemel CORS)'
+        ? 'Hata: Failed to fetch (CORS/URL/Server)'
         : `Hata: ${msg.slice(0, 42)}`;
       setStatus(providerId, false, pretty);
       console.error(providerId, e);
