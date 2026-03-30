@@ -2,6 +2,7 @@ const { app, BrowserWindow, BrowserView, ipcMain } = require('electron')
 const path = require('path')
 
 const DESKTOP_CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
+const GEMINI_FALLBACK_URL = 'https://gemini.google.com/app'
 
 /* ═══════════════════════════════════════════
    AI SITES CONFIG
@@ -184,6 +185,7 @@ app.whenReady().then(() => {
 
   // BrowserView'ları oluştur
   AI_SITES.forEach(site => {
+    let retriedWithGeminiFallback = false
     const view = new BrowserView({
       webPreferences: {
         contextIsolation: true,
@@ -201,6 +203,20 @@ app.whenReady().then(() => {
     })
     view.webContents.on('did-start-loading', () => {
       mainWindow.webContents.send('status-update', { id: site.id, status: 'loading' })
+    })
+    view.webContents.on('did-fail-load', (_, code, desc, url, isMainFrame) => {
+      if (!isMainFrame) return
+
+      if (site.id === 'gemini' && !retriedWithGeminiFallback && url !== GEMINI_FALLBACK_URL) {
+        retriedWithGeminiFallback = true
+        view.webContents.loadURL(GEMINI_FALLBACK_URL)
+        return
+      }
+
+      mainWindow.webContents.send('status-update', {
+        id: site.id,
+        status: `error:${code}:${desc}`,
+      })
     })
   })
 
