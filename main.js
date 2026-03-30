@@ -1,5 +1,7 @@
-const { app, BrowserWindow, BrowserView, ipcMain, session } = require('electron')
+const { app, BrowserWindow, BrowserView, ipcMain } = require('electron')
 const path = require('path')
+
+const DESKTOP_CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
 
 /* ═══════════════════════════════════════════
    AI SITES CONFIG
@@ -8,7 +10,7 @@ const AI_SITES = [
   { id: 'claude',  name: 'Claude',  emoji: '🔮', url: 'https://claude.ai',              color: '#c4b5fd' },
   { id: 'chatgpt', name: 'GPT-4o',  emoji: '⚙️', url: 'https://chatgpt.com',            color: '#6ee7b7' },
   { id: 'grok',    name: 'Grok',    emoji: '⚡', url: 'https://grok.com',               color: '#fcd34d' },
-  { id: 'gemini',  name: 'Gemini',  emoji: '💎', url: 'https://gemini.google.com/app',  color: '#7dd3fc' },
+  { id: 'gemini',  name: 'Gemini',  emoji: '💎', url: 'https://gemini.google.com/',     color: '#7dd3fc' },
   { id: 'meta',    name: 'Meta AI', emoji: '🦙', url: 'https://www.meta.ai',            color: '#fdba74' },
 ]
 
@@ -190,6 +192,7 @@ app.whenReady().then(() => {
       },
     })
     views[site.id] = view
+    view.webContents.setUserAgent(DESKTOP_CHROME_UA)
     view.webContents.loadURL(site.url)
 
     // Yükleme tamamlandığında UI'a bildir
