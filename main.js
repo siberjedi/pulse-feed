@@ -13,7 +13,7 @@ const GEMINI_FALLBACK_URL = 'https://gemini.google.com/app'
 const AI_SITES = [
   { id: 'claude',  name: 'Claude',  emoji: '🔮', url: 'https://claude.ai',              color: '#c4b5fd' },
   { id: 'chatgpt', name: 'GPT-4o',  emoji: '⚙️', url: 'https://chatgpt.com',            color: '#6ee7b7' },
-  { id: 'grok',    name: 'Grok',    emoji: '⚡', url: 'https://grok.com',               color: '#fcd34d' },
+  { id: 'deepseek',name: 'DeepSeek',emoji: '🧠', url: 'https://chat.deepseek.com',      color: '#fcd34d' },
   { id: 'gemini',  name: 'Gemini',  emoji: '💎', url: 'https://gemini.google.com/',     color: '#7dd3fc' },
   { id: 'meta',    name: 'Meta AI', emoji: '🦙', url: 'https://www.meta.ai',            color: '#fdba74' },
 ]
@@ -74,7 +74,7 @@ function getInjectScript(siteId, text) {
       return 'ok'
     })()`,
 
-    grok: `(function() {
+    deepseek: `(function() {
       const el = document.querySelector('textarea')
               || document.querySelector('div[contenteditable="true"]')
               || document.querySelector('input[type="text"]')
@@ -153,7 +153,7 @@ function getInjectScript(siteId, text) {
     })()`,
   }
 
-  return scripts[siteId] || scripts.grok
+  return scripts[siteId] || scripts.deepseek
 }
 
 /* ═══════════════════════════════════════════

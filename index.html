@@ -220,6 +220,10 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
   color: var(--c);
   background: #110808;
 }
+.chip:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
 #msg-input {
   flex: 1;
   background: #0f0a08;
@@ -328,11 +332,12 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
 const AI_SITES = [
   { id:'claude',  name:'Claude',  emoji:'🔮', color:'#c4b5fd' },
   { id:'chatgpt', name:'GPT-4o',  emoji:'⚙️', color:'#6ee7b7' },
-  { id:'grok',    name:'Grok',    emoji:'⚡', color:'#fcd34d' },
+  { id:'deepseek',name:'DeepSeek',emoji:'🧠', color:'#fcd34d' },
   { id:'gemini',  name:'Gemini',  emoji:'💎', color:'#7dd3fc' },
   { id:'meta',    name:'Meta AI', emoji:'🦙', color:'#fdba74' },
 ]
 
+const TOURNAMENT_KEY = 'aiSurvivor.tournament.v1'
 let statusMap = {}       // { siteId: 'loading'|'ready' }
 let selectedTargets = new Set(AI_SITES.map(s => s.id))  // varsayılan: hepsi seçili
 let selectedPlayers = new Set(AI_SITES.map(s => s.id))
@@ -372,7 +377,9 @@ function buildChips() {
     chip.style.setProperty('--c', site.color)
     chip.id = 'chip-' + site.id
     chip.textContent = site.emoji + ' ' + site.name
+    if (!selectedPlayers.has(site.id)) chip.disabled = true
     chip.onclick = () => {
+      if (!selectedPlayers.has(site.id)) return
       if (selectedTargets.has(site.id)) {
         if (selectedTargets.size === 1) return  // en az 1 seçili kalsın
         selectedTargets.delete(site.id)
@@ -384,6 +391,37 @@ function buildChips() {
     }
     container.appendChild(chip)
   })
+}
+
+function persistTournamentState() {
+  const payload = {
+    players: [...selectedPlayers],
+    eliminationVotes,
+    scoreVotes,
+  }
+  localStorage.setItem(TOURNAMENT_KEY, JSON.stringify(payload))
+}
+
+function loadTournamentState() {
+  try {
+    const raw = localStorage.getItem(TOURNAMENT_KEY)
+    if (!raw) return
+    const data = JSON.parse(raw)
+    if (Array.isArray(data.players) && data.players.length) {
+      selectedPlayers = new Set(data.players.filter(id => AI_SITES.some(s => s.id === id)))
+    }
+    if (data.eliminationVotes && typeof data.eliminationVotes === 'object') {
+      eliminationVotes = data.eliminationVotes
+    }
+    if (data.scoreVotes && typeof data.scoreVotes === 'object') {
+      scoreVotes = data.scoreVotes
+    }
+  } catch (_) {}
+}
+
+function syncSelectedTargetsFromPlayers() {
+  selectedTargets = new Set([...selectedTargets].filter(id => selectedPlayers.has(id)))
+  if (!selectedTargets.size) selectedTargets = new Set([AI_SITES[0].id])
 }
 
 function activePlayers() {
@@ -402,7 +440,10 @@ function buildPlayersRow() {
       else if (selectedPlayers.size > 1) selectedPlayers.delete(site.id)
       else cb.checked = true
 
+      syncSelectedTargetsFromPlayers()
+      buildChips()
       buildVotingPanels()
+      persistTournamentState()
     }
     root.appendChild(label)
   })
@@ -430,6 +471,7 @@ function buildEliminationRows() {
     row.querySelector('select').onchange = (e) => {
       eliminationVotes[voter.id] = e.target.value || ''
       renderEliminationResults()
+      persistTournamentState()
     }
     root.appendChild(row)
   })
@@ -461,10 +503,12 @@ function buildScoreRows() {
     row.querySelector('select').onchange = (e) => {
       scoreVotes[voter.id] = { ...(scoreVotes[voter.id] || {}), targetId: e.target.value || '' }
       renderScoreResults()
+      persistTournamentState()
     }
     row.querySelector('input').oninput = (e) => {
       scoreVotes[voter.id] = { ...(scoreVotes[voter.id] || {}), points: e.target.value }
       renderScoreResults()
+      persistTournamentState()
     }
     root.appendChild(row)
   })
@@ -579,6 +623,8 @@ function showToast(msg) {
 }
 
 /* ── INIT ── */
+loadTournamentState()
+syncSelectedTargetsFromPlayers()
 buildTabs()
 buildChips()
 buildVotingPanels()
