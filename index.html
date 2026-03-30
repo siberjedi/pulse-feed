@@ -93,23 +93,25 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
 #tabs::-webkit-scrollbar { display: none; }
 
 .menu-toggle {
-  width: 32px;
-  height: 32px;
-  border-radius: 7px;
+  height: 44px;
+  border-radius: 10px;
   border: 1px solid #2a1a10;
   background: #0f0a08;
   color: #e2c6aa;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 .menu-toggle:hover { border-color: #ff6b1a66; color: #ffd7b0; }
 
 #side-menu {
   position: fixed;
-  top: 54px;
-  right: 10px;
-  width: min(720px, calc(100vw - 20px));
-  max-height: calc(100vh - 150px);
+  left: 12px;
+  right: 12px;
+  bottom: 88px;
+  width: auto;
+  max-height: min(52vh, 560px);
   overflow: auto;
   background: #0b0808;
   border: 1px solid #2a1a10;
@@ -190,7 +192,7 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
 
 /* ── BOTTOM BROADCAST BAR ── */
 #broadcast {
-  height: 76px;
+  min-height: 90px;
   background: #080508;
   border-top: 1px solid #1a0a05;
   display: flex;
@@ -236,7 +238,7 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
   outline: none;
   transition: border-color .2s;
   resize: none;
-  height: 48px;
+  min-height: 72px;
   line-height: 1.5;
 }
 #msg-input:focus { border-color: #ff6b1a55; }
@@ -290,7 +292,6 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
 <div id="topbar">
   <span class="logo">🔥 AI SURVIVOR</span>
   <div id="tabs"></div>
-  <button class="menu-toggle" id="menu-toggle" title="Oylama/Puanlama">▾</button>
   <button class="layout-btn active" id="btn-split" onclick="setLayout('split')">⠿ HEPSİ</button>
   <button class="layout-btn" id="btn-focus" onclick="setLayoutFocus()">⊡ ODAK</button>
 </div>
@@ -326,6 +327,7 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
 
 <!-- BROADCAST BAR -->
 <div id="broadcast">
+  <button class="menu-toggle" id="menu-toggle" title="Oylama/Puanlama">⚙ ADMIN / OYLAMA</button>
   <div class="target-chips" id="chips"></div>
   <textarea id="msg-input" placeholder="Hepsine aynı anda mesaj gönder... (Enter = gönder)" onkeydown="handleKey(event)"></textarea>
   <button id="send-btn" onclick="sendBroadcast()">GÖNDER ⚡</button>
@@ -585,8 +587,10 @@ function copyText(id) {
 
 function toggleMenu(forceOpen) {
   const menu = document.getElementById('side-menu')
+  const toggle = document.getElementById('menu-toggle')
   const open = typeof forceOpen === 'boolean' ? forceOpen : !menu.classList.contains('open')
   menu.classList.toggle('open', open)
+  if (toggle) toggle.textContent = open ? '✕ PANELİ KAPAT' : '⚙ ADMIN / OYLAMA'
 }
 
 /* ── LAYOUT ── */
