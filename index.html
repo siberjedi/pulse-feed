@@ -297,6 +297,11 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
 
 <aside id="side-menu" aria-label="Oylama ve puanlama menüsü">
   <section class="menu-card">
+    <div class="menu-title">AI Admin (Aktif Et / Kapat)</div>
+    <div class="players-row" id="ai-admin-row"></div>
+  </section>
+
+  <section class="menu-card">
     <div class="menu-title">Oyuncular</div>
     <div class="players-row" id="players-row"></div>
   </section>
@@ -329,18 +334,14 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
 <div id="toast"></div>
 
 <script>
-const AI_SITES = [
-  { id:'claude',  name:'Claude',  emoji:'🔮', color:'#c4b5fd' },
-  { id:'chatgpt', name:'GPT-4o',  emoji:'⚙️', color:'#6ee7b7' },
-  { id:'deepseek',name:'DeepSeek',emoji:'🧠', color:'#fcd34d' },
-  { id:'gemini',  name:'Gemini',  emoji:'💎', color:'#7dd3fc' },
-  { id:'meta',    name:'Meta AI', emoji:'🦙', color:'#fdba74' },
-]
+let AI_SITES = []
+let ALL_SITES = []
+let CORE_SITE_IDS = []
 
 const TOURNAMENT_KEY = 'aiSurvivor.tournament.v1'
 let statusMap = {}       // { siteId: 'loading'|'ready' }
-let selectedTargets = new Set(AI_SITES.map(s => s.id))  // varsayılan: hepsi seçili
-let selectedPlayers = new Set(AI_SITES.map(s => s.id))
+let selectedTargets = new Set()
+let selectedPlayers = new Set()
 let currentLayout = 'split'
 let focusId = 'claude'
 let eliminationVotes = {}   // { voterId: targetId }
@@ -390,6 +391,38 @@ function buildChips() {
       }
     }
     container.appendChild(chip)
+  })
+}
+
+function setActiveSites(activeSites) {
+  AI_SITES = activeSites || []
+  const valid = new Set(AI_SITES.map(s => s.id))
+  selectedTargets = new Set([...selectedTargets].filter(id => valid.has(id)))
+  selectedPlayers = new Set([...selectedPlayers].filter(id => valid.has(id)))
+
+  if (!selectedTargets.size && AI_SITES.length) selectedTargets = new Set(AI_SITES.map(s => s.id))
+  if (!selectedPlayers.size && AI_SITES.length) selectedPlayers = new Set(AI_SITES.map(s => s.id))
+}
+
+function buildAiAdminRow() {
+  const root = document.getElementById('ai-admin-row')
+  root.innerHTML = ''
+  ALL_SITES.forEach(site => {
+    const isCore = CORE_SITE_IDS.includes(site.id)
+    const label = document.createElement('label')
+    label.innerHTML = `<input type="checkbox" value="${site.id}" ${AI_SITES.some(s => s.id === site.id) ? 'checked' : ''} ${isCore ? 'disabled' : ''}> ${site.emoji} ${site.name}`
+    const cb = label.querySelector('input')
+    cb.onchange = async () => {
+      const ids = Array.from(document.querySelectorAll('#ai-admin-row input[type="checkbox"]:checked')).map(x => x.value)
+      const res = await window.aiSurvivor.setActiveSites(ids)
+      setActiveSites(res.activeSites)
+      syncSelectedTargetsFromPlayers()
+      buildTabs()
+      buildChips()
+      buildVotingPanels()
+      buildAiAdminRow()
+    }
+    root.appendChild(label)
   })
 }
 
@@ -578,9 +611,12 @@ window.aiSurvivor.onStatus(({ id, status }) => {
   }
 })
 
-window.aiSurvivor.onReady(() => {
+window.aiSurvivor.onReady((sites) => {
+  if (Array.isArray(sites)) setActiveSites(sites)
   buildTabs()
   buildChips()
+  buildVotingPanels()
+  buildAiAdminRow()
 })
 
 /* ── BROADCAST ── */
@@ -623,11 +659,20 @@ function showToast(msg) {
 }
 
 /* ── INIT ── */
-loadTournamentState()
-syncSelectedTargetsFromPlayers()
-buildTabs()
-buildChips()
-buildVotingPanels()
+async function init() {
+  const siteMeta = await window.aiSurvivor.getAvailableSites()
+  ALL_SITES = siteMeta.allSites || []
+  CORE_SITE_IDS = siteMeta.coreSiteIds || []
+  setActiveSites((siteMeta.activeSiteIds || []).map(id => ALL_SITES.find(s => s.id === id)).filter(Boolean))
+
+  loadTournamentState()
+  syncSelectedTargetsFromPlayers()
+  buildTabs()
+  buildChips()
+  buildVotingPanels()
+  buildAiAdminRow()
+}
+
 document.getElementById('menu-toggle').addEventListener('click', () => toggleMenu())
 document.addEventListener('click', (e) => {
   const menu = document.getElementById('side-menu')
@@ -635,6 +680,7 @@ document.addEventListener('click', (e) => {
   if (menu.contains(e.target) || e.target.id === 'menu-toggle') return
   toggleMenu(false)
 })
+init()
 </script>
 </body>
 </html>
