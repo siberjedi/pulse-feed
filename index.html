@@ -1,12 +1,328 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0; url=admin.html" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pulse</title>
+<meta charset="UTF-8">
+<title>AI Survivor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Outfit:wght@300;400;500;600;700&display=swap">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #050508;
+  color: #f0e6d3;
+  font-family: 'Outfit', system-ui, sans-serif;
+  overflow: hidden;
+  -webkit-app-region: drag; /* pencereyi sürüklenebilir yap */
+}
+button, input { -webkit-app-region: no-drag; }
+
+/* ── TOP BAR ── */
+#topbar {
+  height: 54px;
+  background: #0a0608;
+  border-bottom: 1px solid #1a0a05;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.logo {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 13px;
+  background: linear-gradient(135deg, #ff6b1a, #ffd700);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+.ai-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  background: transparent;
+  color: #666;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all .18s;
+  white-space: nowrap;
+}
+.ai-tab:hover { background: #1a0a05; color: #aaa; }
+.ai-tab.active { background: #1a0a05; border-color: var(--c); color: var(--c); }
+.ai-tab .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #333;
+  flex-shrink: 0;
+}
+.ai-tab .dot.loading { background: #f59e0b; animation: pulse 1s infinite; }
+.ai-tab .dot.ready   { background: #22c55e; }
+
+.layout-btn {
+  margin-left: auto;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid #2a1a10;
+  background: #0f0a08;
+  color: #888;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .18s;
+  letter-spacing: .05em;
+}
+.layout-btn:hover { border-color: #ff6b1a55; color: #ccc; }
+.layout-btn.active { border-color: #ff6b1a; color: #ff6b1a; background: #1a0800; }
+
+/* ── MIDDLE (BrowserViews buraya) ── */
+#viewport { flex: 1; }
+
+/* ── BOTTOM BROADCAST BAR ── */
+#broadcast {
+  height: 76px;
+  background: #080508;
+  border-top: 1px solid #1a0a05;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+.target-chips {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.chip {
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid #2a1a10;
+  background: #0a0608;
+  color: #666;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .15s;
+}
+.chip.selected {
+  border-color: var(--c);
+  color: var(--c);
+  background: #110808;
+}
+#msg-input {
+  flex: 1;
+  background: #0f0a08;
+  border: 1px solid #2a1a10;
+  border-radius: 10px;
+  color: #f0e6d3;
+  font-size: 14px;
+  font-family: inherit;
+  padding: 10px 16px;
+  outline: none;
+  transition: border-color .2s;
+  resize: none;
+  height: 48px;
+  line-height: 1.5;
+}
+#msg-input:focus { border-color: #ff6b1a55; }
+#msg-input::placeholder { color: #3a2010; }
+#send-btn {
+  padding: 12px 22px;
+  background: linear-gradient(135deg, #ff6b1a, #cc4a00);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 0 16px #ff6b1a33;
+  transition: all .2s;
+}
+#send-btn:hover { box-shadow: 0 0 24px #ff6b1a55; transform: translateY(-1px); }
+#send-btn:active { transform: translateY(0); }
+#send-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+/* ── TOAST ── */
+#toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: #1a0a05;
+  border: 1px solid #ff6b1a44;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 13px;
+  color: #f0e6d3;
+  opacity: 0;
+  transition: all .3s;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 999;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+</style>
 </head>
 <body>
-  <p>Go to <a href="admin.html">admin.html</a>.</p>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <span class="logo">🔥 AI SURVIVOR</span>
+  <div id="tabs"></div>
+  <button class="layout-btn active" id="btn-split" onclick="setLayout('split')">⠿ HEPSİ</button>
+  <button class="layout-btn" id="btn-focus" onclick="setLayoutFocus()">⊡ ODAK</button>
+</div>
+
+<!-- VIEWPORT placeholder (BrowserViews buraya konumlanır) -->
+<div id="viewport"></div>
+
+<!-- BROADCAST BAR -->
+<div id="broadcast">
+  <div class="target-chips" id="chips"></div>
+  <textarea id="msg-input" placeholder="Hepsine aynı anda mesaj gönder... (Enter = gönder)" onkeydown="handleKey(event)"></textarea>
+  <button id="send-btn" onclick="sendBroadcast()">GÖNDER ⚡</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const AI_SITES = [
+  { id:'claude',  name:'Claude',  emoji:'🔮', color:'#c4b5fd' },
+  { id:'chatgpt', name:'GPT-4o',  emoji:'⚙️', color:'#6ee7b7' },
+  { id:'grok',    name:'Grok',    emoji:'⚡', color:'#fcd34d' },
+  { id:'gemini',  name:'Gemini',  emoji:'💎', color:'#7dd3fc' },
+  { id:'meta',    name:'Meta AI', emoji:'🦙', color:'#fdba74' },
+]
+
+let statusMap = {}       // { siteId: 'loading'|'ready' }
+let selectedTargets = new Set(AI_SITES.map(s => s.id))  // varsayılan: hepsi seçili
+let currentLayout = 'split'
+let focusId = 'claude'
+
+/* ── BUILD UI ── */
+function buildTabs() {
+  const container = document.getElementById('tabs')
+  container.innerHTML = ''
+  AI_SITES.forEach(site => {
+    const tab = document.createElement('button')
+    tab.className = 'ai-tab' + (currentLayout === 'focus' && focusId === site.id ? ' active' : '')
+    tab.style.setProperty('--c', site.color)
+    tab.id = 'tab-' + site.id
+    tab.innerHTML = `<span class="dot" id="dot-${site.id}"></span>${site.emoji} ${site.name}`
+    tab.onclick = () => {
+      if (currentLayout === 'focus') {
+        focusId = site.id
+        window.aiSurvivor.setLayout('focus', site.id)
+        document.querySelectorAll('.ai-tab').forEach(t => t.classList.remove('active'))
+        tab.classList.add('active')
+      }
+    }
+    container.appendChild(tab)
+  })
+}
+
+function buildChips() {
+  const container = document.getElementById('chips')
+  container.innerHTML = ''
+  AI_SITES.forEach(site => {
+    const chip = document.createElement('button')
+    chip.className = 'chip selected'
+    chip.style.setProperty('--c', site.color)
+    chip.id = 'chip-' + site.id
+    chip.textContent = site.emoji + ' ' + site.name
+    chip.onclick = () => {
+      if (selectedTargets.has(site.id)) {
+        if (selectedTargets.size === 1) return  // en az 1 seçili kalsın
+        selectedTargets.delete(site.id)
+        chip.classList.remove('selected')
+      } else {
+        selectedTargets.add(site.id)
+        chip.classList.add('selected')
+      }
+    }
+    container.appendChild(chip)
+  })
+}
+
+/* ── LAYOUT ── */
+function setLayout(mode) {
+  currentLayout = mode
+  document.getElementById('btn-split').classList.toggle('active', mode === 'split')
+  document.getElementById('btn-focus').classList.toggle('active', mode === 'focus')
+  window.aiSurvivor.setLayout(mode, focusId)
+  buildTabs()
+}
+function setLayoutFocus() {
+  setLayout('focus')
+}
+
+/* ── STATUS UPDATES ── */
+window.aiSurvivor.onStatus(({ id, status }) => {
+  statusMap[id] = status
+  const dot = document.getElementById('dot-' + id)
+  if (dot) { dot.className = 'dot ' + status }
+})
+
+window.aiSurvivor.onReady(() => {
+  buildTabs()
+  buildChips()
+})
+
+/* ── BROADCAST ── */
+async function sendBroadcast() {
+  const text = document.getElementById('msg-input').value.trim()
+  if (!text) return
+  const btn = document.getElementById('send-btn')
+  btn.disabled = true
+  btn.textContent = 'GÖNDERİLİYOR...'
+  document.getElementById('msg-input').value = ''
+
+  const targets = [...selectedTargets]
+  const results = await window.aiSurvivor.broadcast(text, targets)
+
+  const ok    = Object.values(results).filter(r => r === 'ok').length
+  const fail  = Object.values(results).filter(r => r !== 'ok').length
+  const names = Object.entries(results).filter(([,v]) => v !== 'ok').map(([k]) => k).join(', ')
+
+  showToast(fail === 0
+    ? `✅ ${ok} AI'a gönderildi`
+    : `⚠️ ${ok} başarılı, ${fail} hata (${names})`)
+
+  btn.disabled = false
+  btn.textContent = 'GÖNDER ⚡'
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    sendBroadcast()
+  }
+}
+
+/* ── TOAST ── */
+function showToast(msg) {
+  const t = document.getElementById('toast')
+  t.textContent = msg
+  t.classList.add('show')
+  setTimeout(() => t.classList.remove('show'), 2800)
+}
+
+/* ── INIT ── */
+buildTabs()
+buildChips()
+</script>
 </body>
 </html>
