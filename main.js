@@ -219,6 +219,7 @@ let currentLayout = 'split'   // 'split' | 'focus'
 let focusedId = 'claude'
 let activeSiteIds = [...CORE_SITE_IDS]
 let isPanelOpen = false
+let panelReservedHeight = PANEL_HEIGHT
 
 function getSitesByIds(ids) {
   const set = new Set(ids)
@@ -243,7 +244,7 @@ function applyLayout() {
   const activeSites = getActiveSites()
   if (!activeSites.length) return
   const { width, height } = mainWindow.getContentBounds()
-  const reservedBottom = BOTTOM_BAR + (isPanelOpen ? PANEL_HEIGHT : 0)
+  const reservedBottom = BOTTOM_BAR + (isPanelOpen ? panelReservedHeight : 0)
   const viewHeight = Math.max(120, height - TOP_BAR - reservedBottom)
   const count = activeSites.length
 
@@ -384,7 +385,13 @@ ipcMain.handle('set-layout', (_, mode, focusId) => {
 })
 
 ipcMain.handle('set-panel-open', (_, open) => {
-  isPanelOpen = Boolean(open)
+  if (typeof open === 'number') {
+    isPanelOpen = open > 0
+    panelReservedHeight = Math.max(120, Math.min(1200, Math.floor(open)))
+  } else {
+    isPanelOpen = Boolean(open)
+    if (!isPanelOpen) panelReservedHeight = PANEL_HEIGHT
+  }
   applyLayout()
   return { ok: true }
 })

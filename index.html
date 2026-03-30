@@ -129,6 +129,11 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
   transform: translateY(0);
   pointer-events: auto;
 }
+#side-menu.fullscreen {
+  top: 54px;
+  bottom: 96px;
+  max-height: none;
+}
 .menu-card {
   border: 1px solid #25160d;
   border-radius: 10px;
@@ -186,6 +191,20 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
   cursor: pointer;
 }
 .copy-btn:hover { border-color: #ff6b1a; }
+.panel-tools {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.panel-tools button {
+  border: 1px solid #4a2d18;
+  background: #120905;
+  color: #ffd7b0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
 
 /* ── MIDDLE (BrowserViews buraya) ── */
 #viewport { flex: 1; }
@@ -297,6 +316,10 @@ button, input, select, textarea, label { -webkit-app-region: no-drag; }
 </div>
 
 <aside id="side-menu" aria-label="Oylama ve puanlama menüsü">
+  <div class="panel-tools">
+    <button type="button" id="panel-fullscreen-btn">⛶ Tam Ekran</button>
+    <button type="button" id="panel-top-btn">⇡ AI Ayarlarına Git</button>
+  </div>
   <section class="menu-card">
     <div class="menu-title">AI Admin (Aktif Et / Kapat)</div>
     <div class="players-row" id="ai-admin-row"></div>
@@ -590,8 +613,30 @@ function toggleMenu(forceOpen) {
   const toggle = document.getElementById('menu-toggle')
   const open = typeof forceOpen === 'boolean' ? forceOpen : !menu.classList.contains('open')
   menu.classList.toggle('open', open)
+  if (open) menu.scrollTop = 0
   if (toggle) toggle.textContent = open ? '✕ PANELİ KAPAT' : '⚙ ADMIN / OYLAMA'
-  window.aiSurvivor.setPanelOpen(open)
+  syncPanelReserve()
+}
+
+function syncPanelReserve() {
+  const menu = document.getElementById('side-menu')
+  if (!menu.classList.contains('open')) {
+    window.aiSurvivor.setPanelOpen(false)
+    return
+  }
+
+  const rect = menu.getBoundingClientRect()
+  const reservedHeight = Math.max(180, Math.ceil(window.innerHeight - rect.top - 90))
+  window.aiSurvivor.setPanelOpen(reservedHeight)
+}
+
+function togglePanelFullscreen() {
+  const menu = document.getElementById('side-menu')
+  const btn = document.getElementById('panel-fullscreen-btn')
+  if (!menu.classList.contains('open')) toggleMenu(true)
+  menu.classList.toggle('fullscreen')
+  btn.textContent = menu.classList.contains('fullscreen') ? '🗗 Normal Boyut' : '⛶ Tam Ekran'
+  syncPanelReserve()
 }
 
 /* ── LAYOUT ── */
@@ -680,12 +725,17 @@ async function init() {
 }
 
 document.getElementById('menu-toggle').addEventListener('click', () => toggleMenu())
+document.getElementById('panel-fullscreen-btn').addEventListener('click', () => togglePanelFullscreen())
+document.getElementById('panel-top-btn').addEventListener('click', () => {
+  document.getElementById('side-menu').scrollTop = 0
+})
 document.addEventListener('click', (e) => {
   const menu = document.getElementById('side-menu')
   if (!menu.classList.contains('open')) return
   if (menu.contains(e.target) || e.target.id === 'menu-toggle') return
   toggleMenu(false)
 })
+window.addEventListener('resize', () => syncPanelReserve())
 init()
 </script>
 </body>
