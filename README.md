@@ -13,12 +13,16 @@ npm start
 
 ## İlk Açılışta
 
-Uygulama açıldığında her AI kendi gerçek sitesinde açılır:
+Uygulama açıldığında çekirdek AI'lar kendi gerçek sitesinde açılır:
 - 🔮 Claude → claude.ai
 - ⚙️ GPT-4o → chatgpt.com
-- ⚡ Grok → grok.com
 - 💎 Gemini → gemini.google.com
 - 🦙 Meta AI → meta.ai
+
+Opsiyonel AI'lar (admin menüsünden aç/kapat):
+- 🧠 DeepSeek → chat.deepseek.com
+- 🌪️ Mistral AI → chat.mistral.ai
+- 🦙 Llama → meta.ai
 
 Her birinde kendi hesabınla giriş yap. Session kaydolur, bir daha sormaz.
 
@@ -32,6 +36,12 @@ Her birinde kendi hesabınla giriş yap. Session kaydolur, bir daha sormaz.
 - Alttaki input'a yaz, Enter veya GÖNDER ⚡ butonuna bas
 - Chips'lerden istediğin AI'ları seç/çıkar
 - Hepsi aynı anda mesajı alır
+
+### Admin / Turnuva Menüsü
+- Üst çubuktaki `▾` butonuyla gizli menüyü aç
+- **AI Admin** bölümünden opsiyonel AI'ları aktif/pasif yap
+- **Oyuncular**, **Eleme Oylaması** ve **Puanlama** bölümleri buradan yönetilir
+- Sonuç metinleri kopyalanabilir
 
 ## Notlar
 - Selector injection site güncellemelerinde kırılabilir
