@@ -16,7 +16,7 @@ body {
   overflow: hidden;
   -webkit-app-region: drag; /* pencereyi sürüklenebilir yap */
 }
-button, input { -webkit-app-region: no-drag; }
+button, input, select, textarea, label { -webkit-app-region: no-drag; }
 
 /* ── TOP BAR ── */
 #topbar {
@@ -28,6 +28,8 @@ button, input { -webkit-app-region: no-drag; }
   padding: 0 14px;
   gap: 6px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 30;
 }
 .logo {
   font-family: 'Cinzel Decorative', serif;
@@ -64,6 +66,7 @@ button, input { -webkit-app-region: no-drag; }
 }
 .ai-tab .dot.loading { background: #f59e0b; animation: pulse 1s infinite; }
 .ai-tab .dot.ready   { background: #22c55e; }
+.ai-tab .dot.error   { background: #ef4444; }
 
 .layout-btn {
   margin-left: auto;
@@ -80,6 +83,107 @@ button, input { -webkit-app-region: no-drag; }
 }
 .layout-btn:hover { border-color: #ff6b1a55; color: #ccc; }
 .layout-btn.active { border-color: #ff6b1a; color: #ff6b1a; background: #1a0800; }
+#tabs {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#tabs::-webkit-scrollbar { display: none; }
+
+.menu-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  border: 1px solid #2a1a10;
+  background: #0f0a08;
+  color: #e2c6aa;
+  cursor: pointer;
+  font-size: 14px;
+}
+.menu-toggle:hover { border-color: #ff6b1a66; color: #ffd7b0; }
+
+#side-menu {
+  position: fixed;
+  top: 54px;
+  right: 10px;
+  width: min(720px, calc(100vw - 20px));
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+  background: #0b0808;
+  border: 1px solid #2a1a10;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 18px 40px #00000099;
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: .18s ease;
+  z-index: 1200;
+}
+#side-menu.open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.menu-card {
+  border: 1px solid #25160d;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #0f0a08;
+}
+.menu-title {
+  color: #ffb98d;
+  font-size: 12px;
+  letter-spacing: .08em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.players-row, .vote-row, .score-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.players-row label, .vote-label {
+  font-size: 12px;
+  color: #d6b89d;
+}
+.vote-row select, .score-row select, .score-row input {
+  background: #090607;
+  border: 1px solid #2a1a10;
+  border-radius: 7px;
+  color: #f0e6d3;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+.score-row input { width: 75px; }
+.output-box {
+  width: 100%;
+  min-height: 96px;
+  background: #080506;
+  border: 1px solid #2a1a10;
+  border-radius: 8px;
+  color: #f0e6d3;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+.copy-btn {
+  margin-top: 6px;
+  border: 1px solid #4a2d18;
+  background: #1a0d07;
+  color: #ffd7b0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.copy-btn:hover { border-color: #ff6b1a; }
 
 /* ── MIDDLE (BrowserViews buraya) ── */
 #viewport { flex: 1; }
@@ -182,9 +286,31 @@ button, input { -webkit-app-region: no-drag; }
 <div id="topbar">
   <span class="logo">🔥 AI SURVIVOR</span>
   <div id="tabs"></div>
+  <button class="menu-toggle" id="menu-toggle" title="Oylama/Puanlama">▾</button>
   <button class="layout-btn active" id="btn-split" onclick="setLayout('split')">⠿ HEPSİ</button>
   <button class="layout-btn" id="btn-focus" onclick="setLayoutFocus()">⊡ ODAK</button>
 </div>
+
+<aside id="side-menu" aria-label="Oylama ve puanlama menüsü">
+  <section class="menu-card">
+    <div class="menu-title">Oyuncular</div>
+    <div class="players-row" id="players-row"></div>
+  </section>
+
+  <section class="menu-card">
+    <div class="menu-title">Eleme Oylaması</div>
+    <div id="elimination-votes"></div>
+    <textarea id="elimination-results" class="output-box" readonly></textarea>
+    <button class="copy-btn" onclick="copyText('elimination-results')">Oylama sonuçları kopyala</button>
+  </section>
+
+  <section class="menu-card">
+    <div class="menu-title">Puanlama</div>
+    <div id="score-rows"></div>
+    <textarea id="score-results" class="output-box" readonly></textarea>
+    <button class="copy-btn" onclick="copyText('score-results')">Puanlama sonuçları kopyala</button>
+  </section>
+</aside>
 
 <!-- VIEWPORT placeholder (BrowserViews buraya konumlanır) -->
 <div id="viewport"></div>
@@ -209,8 +335,11 @@ const AI_SITES = [
 
 let statusMap = {}       // { siteId: 'loading'|'ready' }
 let selectedTargets = new Set(AI_SITES.map(s => s.id))  // varsayılan: hepsi seçili
+let selectedPlayers = new Set(AI_SITES.map(s => s.id))
 let currentLayout = 'split'
 let focusId = 'claude'
+let eliminationVotes = {}   // { voterId: targetId }
+let scoreVotes = {}         // { voterId: { targetId, points } }
 
 /* ── BUILD UI ── */
 function buildTabs() {
@@ -257,6 +386,132 @@ function buildChips() {
   })
 }
 
+function activePlayers() {
+  return AI_SITES.filter(s => selectedPlayers.has(s.id))
+}
+
+function buildPlayersRow() {
+  const root = document.getElementById('players-row')
+  root.innerHTML = ''
+  AI_SITES.forEach(site => {
+    const label = document.createElement('label')
+    label.innerHTML = `<input type="checkbox" value="${site.id}" ${selectedPlayers.has(site.id) ? 'checked' : ''}> ${site.emoji} ${site.name}`
+    const cb = label.querySelector('input')
+    cb.onchange = () => {
+      if (cb.checked) selectedPlayers.add(site.id)
+      else if (selectedPlayers.size > 1) selectedPlayers.delete(site.id)
+      else cb.checked = true
+
+      buildVotingPanels()
+    }
+    root.appendChild(label)
+  })
+}
+
+function playerOptions(excludeId, selectedValue) {
+  const options = ['<option value="">— seç —</option>']
+  activePlayers().forEach(p => {
+    if (p.id === excludeId) return
+    options.push(`<option value="${p.id}" ${selectedValue === p.id ? 'selected' : ''}>${p.emoji} ${p.name}</option>`)
+  })
+  return options.join('')
+}
+
+function buildEliminationRows() {
+  const root = document.getElementById('elimination-votes')
+  root.innerHTML = ''
+  activePlayers().forEach(voter => {
+    const row = document.createElement('div')
+    row.className = 'vote-row'
+    row.innerHTML = `
+      <span class="vote-label">${voter.emoji} ${voter.name} →</span>
+      <select data-voter="${voter.id}">${playerOptions(voter.id, eliminationVotes[voter.id])}</select>
+    `
+    row.querySelector('select').onchange = (e) => {
+      eliminationVotes[voter.id] = e.target.value || ''
+      renderEliminationResults()
+    }
+    root.appendChild(row)
+  })
+}
+
+function renderEliminationResults() {
+  const out = document.getElementById('elimination-results')
+  const lines = ['Oylama Sonuçları']
+  activePlayers().forEach(voter => {
+    const targetId = eliminationVotes[voter.id]
+    const target = AI_SITES.find(s => s.id === targetId)
+    lines.push(`${voter.name} -> ${target ? target.name : '-'}`)
+  })
+  out.value = lines.join('\n')
+}
+
+function buildScoreRows() {
+  const root = document.getElementById('score-rows')
+  root.innerHTML = ''
+  activePlayers().forEach(voter => {
+    const current = scoreVotes[voter.id] || { targetId: '', points: '' }
+    const row = document.createElement('div')
+    row.className = 'score-row'
+    row.innerHTML = `
+      <span class="vote-label">${voter.emoji} ${voter.name} →</span>
+      <select data-score-target="${voter.id}">${playerOptions(voter.id, current.targetId)}</select>
+      <input data-score-points="${voter.id}" type="number" min="0" max="12" step="1" value="${current.points}">
+    `
+    row.querySelector('select').onchange = (e) => {
+      scoreVotes[voter.id] = { ...(scoreVotes[voter.id] || {}), targetId: e.target.value || '' }
+      renderScoreResults()
+    }
+    row.querySelector('input').oninput = (e) => {
+      scoreVotes[voter.id] = { ...(scoreVotes[voter.id] || {}), points: e.target.value }
+      renderScoreResults()
+    }
+    root.appendChild(row)
+  })
+}
+
+function renderScoreResults() {
+  const totals = {} // { targetId: points }
+  const lines = ['Puanlama Sonuçları']
+
+  activePlayers().forEach(voter => {
+    const vote = scoreVotes[voter.id] || {}
+    const target = AI_SITES.find(s => s.id === vote.targetId)
+    const points = Number(vote.points)
+    const safePoints = Number.isFinite(points) ? points : 0
+    lines.push(`${voter.name} -> ${target ? target.name : '-'} (${safePoints} puan)`)
+    if (target) totals[target.id] = (totals[target.id] || 0) + safePoints
+  })
+
+  lines.push('', 'Toplam Puanlar')
+  activePlayers().forEach(player => {
+    lines.push(`${player.name}: ${totals[player.id] || 0}`)
+  })
+
+  document.getElementById('score-results').value = lines.join('\n')
+}
+
+function buildVotingPanels() {
+  buildPlayersRow()
+  buildEliminationRows()
+  buildScoreRows()
+  renderEliminationResults()
+  renderScoreResults()
+}
+
+function copyText(id) {
+  const el = document.getElementById(id)
+  el.select()
+  document.execCommand('copy')
+  showToast('📋 Kopyalandı')
+}
+
+function toggleMenu(forceOpen) {
+  const menu = document.getElementById('side-menu')
+  const open = typeof forceOpen === 'boolean' ? forceOpen : !menu.classList.contains('open')
+  menu.classList.toggle('open', open)
+}
+
 /* ── LAYOUT ── */
 function setLayout(mode) {
   currentLayout = mode
@@ -273,7 +528,10 @@ function setLayoutFocus() {
 window.aiSurvivor.onStatus(({ id, status }) => {
   statusMap[id] = status
   const dot = document.getElementById('dot-' + id)
-  if (dot) { dot.className = 'dot ' + status }
+  if (dot) {
+    const state = status.startsWith('error') ? 'error' : status
+    dot.className = 'dot ' + state
+  }
 })
 
 window.aiSurvivor.onReady(() => {
@@ -323,6 +581,14 @@ function showToast(msg) {
 /* ── INIT ── */
 buildTabs()
 buildChips()
+buildVotingPanels()
+document.getElementById('menu-toggle').addEventListener('click', () => toggleMenu())
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('side-menu')
+  if (!menu.classList.contains('open')) return
+  if (menu.contains(e.target) || e.target.id === 'menu-toggle') return
+  toggleMenu(false)
+})
 </script>
 </body>
 </html>

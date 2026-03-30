@@ -179,7 +179,10 @@ app.whenReady().then(() => {
       contextIsolation: true,
       nodeIntegration: false,
     },
+    autoHideMenuBar: true,
   })
+
+  mainWindow.setMenuBarVisibility(false)
 
   mainWindow.loadFile('index.html')
 
