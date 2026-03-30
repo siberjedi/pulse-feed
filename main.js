@@ -211,12 +211,14 @@ function getInjectScript(siteId, text) {
    LAYOUT CONSTANTS
 ═══════════════════════════════════════════ */
 const TOP_BAR    = 54   // tab bar height
-const BOTTOM_BAR = 76   // broadcast bar height
+const BOTTOM_BAR = 96   // broadcast bar height
+const PANEL_HEIGHT = 360
 let mainWindow
 let views = {}          // { siteId: BrowserView }
 let currentLayout = 'split'   // 'split' | 'focus'
 let focusedId = 'claude'
 let activeSiteIds = [...CORE_SITE_IDS]
+let isPanelOpen = false
 
 function getSitesByIds(ids) {
   const set = new Set(ids)
@@ -241,7 +243,8 @@ function applyLayout() {
   const activeSites = getActiveSites()
   if (!activeSites.length) return
   const { width, height } = mainWindow.getContentBounds()
-  const viewHeight = height - TOP_BAR - BOTTOM_BAR
+  const reservedBottom = BOTTOM_BAR + (isPanelOpen ? PANEL_HEIGHT : 0)
+  const viewHeight = Math.max(120, height - TOP_BAR - reservedBottom)
   const count = activeSites.length
 
   if (currentLayout === 'focus') {
@@ -376,6 +379,12 @@ ipcMain.handle('set-layout', (_, mode, focusId) => {
   currentLayout = mode
   if (focusId && views[focusId]) focusedId = focusId
   if (!views[focusedId]) focusedId = getActiveSites()[0]?.id || 'claude'
+  applyLayout()
+  return { ok: true }
+})
+
+ipcMain.handle('set-panel-open', (_, open) => {
+  isPanelOpen = Boolean(open)
   applyLayout()
   return { ok: true }
 })

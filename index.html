@@ -591,6 +591,7 @@ function toggleMenu(forceOpen) {
   const open = typeof forceOpen === 'boolean' ? forceOpen : !menu.classList.contains('open')
   menu.classList.toggle('open', open)
   if (toggle) toggle.textContent = open ? '✕ PANELİ KAPAT' : '⚙ ADMIN / OYLAMA'
+  window.aiSurvivor.setPanelOpen(open)
 }
 
 /* ── LAYOUT ── */
@@ -664,6 +665,7 @@ function showToast(msg) {
 
 /* ── INIT ── */
 async function init() {
+  window.aiSurvivor.setPanelOpen(false)
   const siteMeta = await window.aiSurvivor.getAvailableSites()
   ALL_SITES = siteMeta.allSites || []
   CORE_SITE_IDS = siteMeta.coreSiteIds || []
