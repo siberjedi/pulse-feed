@@ -1,7 +1,10 @@
 const { app, BrowserWindow, BrowserView, ipcMain } = require('electron')
 const path = require('path')
 
-const DESKTOP_CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
+const DESKTOP_CHROME_UA = app.userAgentFallback
+  .replace(/Electron\/[^\s]+\s?/i, '')
+  .replace(/\s{2,}/g, ' ')
+  .trim()
 const GEMINI_FALLBACK_URL = 'https://gemini.google.com/app'
 
 /* ═══════════════════════════════════════════
@@ -74,14 +77,22 @@ function getInjectScript(siteId, text) {
     grok: `(function() {
       const el = document.querySelector('textarea')
               || document.querySelector('div[contenteditable="true"]')
+              || document.querySelector('input[type="text"]')
               || document.querySelector('[role="textbox"][contenteditable="true"]')
       if (!el) return 'no_input'
       el.focus()
 
-      const isTextarea = el.tagName === 'TEXTAREA'
-      if (isTextarea) {
+      const tag = el.tagName
+      const isTextarea = tag === 'TEXTAREA'
+      const isTextInput = tag === 'INPUT'
+      if (isTextarea || isTextInput) {
         const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-        if (setter) setter.call(el, ${t})
+        if (setter && isTextarea) setter.call(el, ${t})
+        else if (isTextInput) {
+          const inputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+          if (inputSetter) inputSetter.call(el, ${t})
+          else el.value = ${t}
+        }
         else el.value = ${t}
       } else {
         document.execCommand('selectAll', false, null)
@@ -93,6 +104,7 @@ function getInjectScript(siteId, text) {
         const btn = document.querySelector('button[type="submit"]')
                  || document.querySelector('button[aria-label*="Send"]')
                  || document.querySelector('button[data-testid*="send"]')
+                 || document.querySelector('button[aria-label*="Gönder"]')
         if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') { btn.click(); return }
         el.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
       }, 450)
