@@ -43,19 +43,31 @@ function getInjectScript(siteId, text) {
 
     chatgpt: `(function() {
       const el = document.querySelector('#prompt-textarea')
+               || document.querySelector('div#prompt-textarea[contenteditable="true"]')
                || document.querySelector('textarea[data-id]')
                || document.querySelector('textarea')
+               || document.querySelector('div[contenteditable="true"][data-testid*="composer"]')
       if (!el) return 'no_input'
       el.focus()
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
-      setter.call(el, ${t})
+
+      const isTextarea = el.tagName === 'TEXTAREA'
+      if (isTextarea) {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+        if (setter) setter.call(el, ${t})
+        else el.value = ${t}
+      } else {
+        document.execCommand('selectAll', false, null)
+        document.execCommand('insertText', false, ${t})
+      }
+
       el.dispatchEvent(new Event('input', { bubbles: true }))
       setTimeout(() => {
         const btn = document.querySelector('[data-testid="send-button"]')
                  || document.querySelector('button[aria-label*="Send"]')
-        if (btn && !btn.disabled) { btn.click(); return }
+                 || document.querySelector('button[data-testid*="send"]')
+        if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') { btn.click(); return }
         el.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
-      }, 400)
+      }, 450)
       return 'ok'
     })()`,
 
