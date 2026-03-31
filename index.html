@@ -685,9 +685,9 @@ async function sendBroadcast() {
   const targets = [...selectedTargets]
   const results = await window.aiSurvivor.broadcast(text, targets)
 
-  const ok    = Object.values(results).filter(r => r === 'ok').length
-  const fail  = Object.values(results).filter(r => r !== 'ok').length
-  const names = Object.entries(results).filter(([,v]) => v !== 'ok').map(([k]) => k).join(', ')
+  const ok    = Object.values(results).filter(r => String(r).startsWith('ok')).length
+  const fail  = Object.values(results).filter(r => !String(r).startsWith('ok')).length
+  const names = Object.entries(results).filter(([,v]) => !String(v).startsWith('ok')).map(([k]) => k).join(', ')
 
   showToast(fail === 0
     ? `✅ ${ok} AI'a gönderildi`
