@@ -82,6 +82,7 @@ function getInjectScript(siteId, text) {
               || document.querySelector('textarea[placeholder*="Message"]')
               || document.querySelector('textarea[placeholder*="message"]')
               || document.querySelector('textarea')
+              || document.querySelector('[data-testid*="chat-input"][contenteditable="true"]')
               || document.querySelector('[role="textbox"][contenteditable="true"]')
               || document.querySelector('div[contenteditable="true"]')
               || document.querySelector('input[type="text"]')
@@ -107,14 +108,27 @@ function getInjectScript(siteId, text) {
       }
 
       el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new KeyboardEvent('keyup', { key:'a', code:'KeyA', bubbles:true }))
       setTimeout(() => {
         const btn = document.querySelector('button[type="submit"]')
                  || document.querySelector('button[aria-label*="Send"]')
                  || document.querySelector('button[data-testid*="send"]')
                  || document.querySelector('button[aria-label*="Gönder"]')
-                 || Array.from(document.querySelectorAll('button')).find(b => /send|gönder/i.test((b.textContent || '').trim()))
+                 || Array.from(document.querySelectorAll('button')).find(b => {
+                    const txt = ((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('title') || '')).trim()
+                    return /send|gönder|submit|yolla/i.test(txt)
+                  })
         if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') { btn.click(); return }
+
+        const form = el.closest('form')
+        if (form) {
+          if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return }
+          if (typeof form.submit === 'function') { form.submit(); return }
+        }
+
         el.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
+        el.dispatchEvent(new KeyboardEvent('keypress', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
+        el.dispatchEvent(new KeyboardEvent('keyup', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
       }, 450)
       return 'ok'
     })()`,
