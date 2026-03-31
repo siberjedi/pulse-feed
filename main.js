@@ -78,14 +78,29 @@ function getInjectScript(siteId, text) {
     })()`,
 
     deepseek: `(function() {
-      const el = document.querySelector('textarea#chat-input')
-              || document.querySelector('textarea[placeholder*="Message"]')
-              || document.querySelector('textarea[placeholder*="message"]')
-              || document.querySelector('textarea')
-              || document.querySelector('[data-testid*="chat-input"][contenteditable="true"]')
-              || document.querySelector('[role="textbox"][contenteditable="true"]')
-              || document.querySelector('div[contenteditable="true"]')
-              || document.querySelector('input[type="text"]')
+      const deepFind = (selectors) => {
+        const queue = [document]
+        while (queue.length) {
+          const root = queue.shift()
+          for (const sel of selectors) {
+            const found = root.querySelector(sel)
+            if (found) return found
+          }
+          root.querySelectorAll('*').forEach((n) => { if (n.shadowRoot) queue.push(n.shadowRoot) })
+        }
+        return null
+      }
+
+      const el = deepFind([
+        'textarea#chat-input',
+        'textarea[placeholder*="Message"]',
+        'textarea[placeholder*="message"]',
+        'textarea',
+        '[data-testid*="chat-input"][contenteditable="true"]',
+        '[role="textbox"][contenteditable="true"]',
+        'div[contenteditable="true"]',
+        'input[type="text"]',
+      ])
       if (!el) return 'no_input'
       el.focus()
 
@@ -113,10 +128,12 @@ function getInjectScript(siteId, text) {
       } catch (_) {}
       el.dispatchEvent(new KeyboardEvent('keyup', { key:'a', code:'KeyA', bubbles:true }))
       setTimeout(() => {
-        const btn = document.querySelector('button[type="submit"]')
-                 || document.querySelector('button[aria-label*="Send"]')
-                 || document.querySelector('button[data-testid*="send"]')
-                 || document.querySelector('button[aria-label*="Gönder"]')
+        const btn = deepFind([
+                  'button[type="submit"]',
+                  'button[aria-label*="Send"]',
+                  'button[data-testid*="send"]',
+                  'button[aria-label*="Gönder"]',
+                ])
                  || Array.from(document.querySelectorAll('button')).find(b => {
                     const txt = ((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('title') || '')).trim()
                     return /send|gönder|submit|yolla/i.test(txt)
