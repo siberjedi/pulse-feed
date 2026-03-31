@@ -78,60 +78,62 @@ function getInjectScript(siteId, text) {
     })()`,
 
     deepseek: `(function() {
-      const el = document.querySelector('textarea#chat-input')
-              || document.querySelector('textarea[placeholder*="Message"]')
-              || document.querySelector('textarea[placeholder*="message"]')
-              || document.querySelector('textarea')
-              || document.querySelector('[role="textbox"][contenteditable="true"]')
-              || document.querySelector('div[contenteditable="true"]')
-              || document.querySelector('input[type="text"]')
-      if (!el) return 'no_input'
-      el.focus()
+      return new Promise((resolve) => {
+        const el = document.querySelector('textarea#chat-input')
+                || document.querySelector('textarea[placeholder*="Message"]')
+                || document.querySelector('textarea[placeholder*="message"]')
+                || document.querySelector('textarea')
+                || document.querySelector('[role="textbox"][contenteditable="true"]')
+                || document.querySelector('div[contenteditable="true"]')
+                || document.querySelector('input[type="text"]')
+        if (!el) { resolve('no_input'); return }
+        el.focus()
 
-      const tag = el.tagName
-      const isTextarea = tag === 'TEXTAREA'
-      const isTextInput = tag === 'INPUT'
-      if (isTextarea || isTextInput) {
-        if (isTextarea) {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-          if (setter) setter.call(el, ${t})
-          else el.value = ${t}
+        const tag = el.tagName
+        const isTextarea = tag === 'TEXTAREA'
+        const isTextInput = tag === 'INPUT'
+        if (isTextarea || isTextInput) {
+          if (isTextarea) {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+            if (setter) setter.call(el, ${t})
+            else el.value = ${t}
+          } else {
+            const inputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+            if (inputSetter) inputSetter.call(el, ${t})
+            else el.value = ${t}
+          }
+          el.dispatchEvent(new Event('change', { bubbles: true }))
         } else {
-          const inputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-          if (inputSetter) inputSetter.call(el, ${t})
-          else el.value = ${t}
-        }
-        el.dispatchEvent(new Event('change', { bubbles: true }))
-      } else {
-        document.execCommand('selectAll', false, null)
-        document.execCommand('insertText', false, ${t})
-      }
-
-      el.dispatchEvent(new Event('input', { bubbles: true }))
-      try { el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ${t} })) } catch (_) {}
-
-      setTimeout(() => {
-        const btn = document.querySelector('[data-testid="send-button"]')
-                 || document.querySelector('button[type="submit"]')
-                 || document.querySelector('button[data-testid*="send"]')
-                 || document.querySelector('button[aria-label*="Send"]')
-                 || document.querySelector('button[aria-label*="Gönder"]')
-                 || Array.from(document.querySelectorAll('button')).find(b => {
-                    const txt = ((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('title') || '')).trim()
-                    return /send|gönder|submit|yolla/i.test(txt)
-                  })
-        if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') { btn.click(); return }
-
-        const form = el.closest('form')
-        if (form) {
-          if (typeof form.requestSubmit === 'function') { form.requestSubmit(); return }
-          if (typeof form.submit === 'function') { form.submit(); return }
+          document.execCommand('selectAll', false, null)
+          document.execCommand('insertText', false, ${t})
         }
 
-        el.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
-        el.dispatchEvent(new KeyboardEvent('keyup', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
-      }, 450)
-      return 'ok'
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        try { el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ${t} })) } catch (_) {}
+
+        setTimeout(() => {
+          const btn = document.querySelector('[data-testid="send-button"]')
+                  || document.querySelector('button[type="submit"]')
+                  || document.querySelector('button[data-testid*="send"]')
+                  || document.querySelector('button[aria-label*="Send"]')
+                  || document.querySelector('button[aria-label*="Gönder"]')
+                  || Array.from(document.querySelectorAll('button')).find(b => {
+                      const txt = ((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('title') || '')).trim()
+                      return /send|gönder|submit|yolla/i.test(txt)
+                    })
+          if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') { btn.click(); resolve('ok_btn'); return }
+
+          const form = el.closest('form')
+          if (form) {
+            if (typeof form.requestSubmit === 'function') { form.requestSubmit(); resolve('ok_form'); return }
+            if (typeof form.submit === 'function') { form.submit(); resolve('ok_form'); return }
+          }
+
+          el.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
+          el.dispatchEvent(new KeyboardEvent('keyup', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
+          resolve('ok_enter')
+        }, 450)
+      })
     })()`,
 
     mistral: `(function() {
@@ -402,10 +404,6 @@ ipcMain.handle('broadcast', async (_, text, targets) => {
           results[siteId] = 'ok_mouse_fallback'
           return
         }
-
-        await new Promise(resolve => setTimeout(resolve, 600))
-        view.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' })
-        view.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' })
       }
       results[siteId] = result
     } catch (e) {
