@@ -108,6 +108,9 @@ function getInjectScript(siteId, text) {
       }
 
       el.dispatchEvent(new Event('input', { bubbles: true }))
+      try {
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ${t} }))
+      } catch (_) {}
       el.dispatchEvent(new KeyboardEvent('keyup', { key:'a', code:'KeyA', bubbles:true }))
       setTimeout(() => {
         const btn = document.querySelector('button[type="submit"]')
@@ -119,6 +122,18 @@ function getInjectScript(siteId, text) {
                     return /send|gönder|submit|yolla/i.test(txt)
                   })
         if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') { btn.click(); return }
+
+        const editorRect = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, right: 0, top: 0, bottom: 0 }
+        const heuristicBtn = Array.from(document.querySelectorAll('button'))
+          .filter(b => !b.disabled && b.getAttribute('aria-disabled') !== 'true')
+          .map(b => {
+            const r = b.getBoundingClientRect()
+            const dy = Math.abs((r.top + r.bottom) / 2 - (editorRect.top + editorRect.bottom) / 2)
+            const dx = r.left >= editorRect.left ? (r.left - editorRect.left) : 9999
+            return { b, score: dy + dx * 0.05 }
+          })
+          .sort((a, z) => a.score - z.score)[0]?.b
+        if (heuristicBtn) { heuristicBtn.click(); return }
 
         const form = el.closest('form')
         if (form) {
