@@ -433,12 +433,16 @@ function buildAiAdminRow() {
   const root = document.getElementById('ai-admin-row')
   root.innerHTML = ''
   ALL_SITES.forEach(site => {
-    const isCore = CORE_SITE_IDS.includes(site.id)
     const label = document.createElement('label')
-    label.innerHTML = `<input type="checkbox" value="${site.id}" ${AI_SITES.some(s => s.id === site.id) ? 'checked' : ''} ${isCore ? 'disabled' : ''}> ${site.emoji} ${site.name}`
+    label.innerHTML = `<input type="checkbox" value="${site.id}" ${AI_SITES.some(s => s.id === site.id) ? 'checked' : ''}> ${site.emoji} ${site.name}`
     const cb = label.querySelector('input')
     cb.onchange = async () => {
       const ids = Array.from(document.querySelectorAll('#ai-admin-row input[type="checkbox"]:checked')).map(x => x.value)
+      if (!ids.length) {
+        cb.checked = true
+        showToast('En az 1 AI aktif kalmalı')
+        return
+      }
       const res = await window.aiSurvivor.setActiveSites(ids)
       setActiveSites(res.activeSites)
       syncSelectedTargetsFromPlayers()

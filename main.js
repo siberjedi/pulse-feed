@@ -19,7 +19,7 @@ const ALL_AI_SITES = [
   { id: 'gemini',  name: 'Gemini',  emoji: '💎', url: 'https://gemini.google.com/',     color: '#7dd3fc' },
   { id: 'meta',    name: 'Meta AI', emoji: '🛰️', url: 'https://www.meta.ai',            color: '#fda4af' },
 ]
-const CORE_SITE_IDS = ['claude', 'chatgpt', 'gemini', 'meta']
+const CORE_SITE_IDS = []
 
 /* ═══════════════════════════════════════════
    INJECTION SCRIPTS
@@ -217,7 +217,7 @@ let mainWindow
 let views = {}          // { siteId: BrowserView }
 let currentLayout = 'split'   // 'split' | 'focus'
 let focusedId = 'claude'
-let activeSiteIds = [...CORE_SITE_IDS]
+let activeSiteIds = ['claude', 'chatgpt', 'gemini', 'meta']
 let isPanelOpen = false
 let panelReservedHeight = PANEL_HEIGHT
 
@@ -232,8 +232,8 @@ function getActiveSites() {
 
 function normalizeActiveSiteIds(inputIds = []) {
   const valid = new Set(ALL_AI_SITES.map(s => s.id))
-  const ids = Array.from(new Set([...(inputIds || []), ...CORE_SITE_IDS])).filter(id => valid.has(id))
-  return ids.length ? ids : [...CORE_SITE_IDS]
+  const ids = Array.from(new Set(inputIds || [])).filter(id => valid.has(id))
+  return ids.length ? ids : [ALL_AI_SITES[0].id]
 }
 
 /* ═══════════════════════════════════════════
