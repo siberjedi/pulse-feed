@@ -417,6 +417,11 @@ ipcMain.handle('broadcast', async (_, text, targets) => {
     try {
       const script = getInjectScript(siteId, text)
       const result = await view.webContents.executeJavaScript(script)
+      if (siteId === 'deepseek') {
+        await new Promise(resolve => setTimeout(resolve, 600))
+        view.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' })
+        view.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' })
+      }
       results[siteId] = result
     } catch (e) {
       results[siteId] = 'error: ' + e.message
