@@ -78,10 +78,13 @@ function getInjectScript(siteId, text) {
     })()`,
 
     deepseek: `(function() {
-      const el = document.querySelector('textarea')
+      const el = document.querySelector('textarea#chat-input')
+              || document.querySelector('textarea[placeholder*="Message"]')
+              || document.querySelector('textarea[placeholder*="message"]')
+              || document.querySelector('textarea')
+              || document.querySelector('[role="textbox"][contenteditable="true"]')
               || document.querySelector('div[contenteditable="true"]')
               || document.querySelector('input[type="text"]')
-              || document.querySelector('[role="textbox"][contenteditable="true"]')
       if (!el) return 'no_input'
       el.focus()
 
@@ -97,6 +100,7 @@ function getInjectScript(siteId, text) {
           else el.value = ${t}
         }
         else el.value = ${t}
+        el.dispatchEvent(new Event('change', { bubbles: true }))
       } else {
         document.execCommand('selectAll', false, null)
         document.execCommand('insertText', false, ${t})
@@ -108,6 +112,7 @@ function getInjectScript(siteId, text) {
                  || document.querySelector('button[aria-label*="Send"]')
                  || document.querySelector('button[data-testid*="send"]')
                  || document.querySelector('button[aria-label*="Gönder"]')
+                 || Array.from(document.querySelectorAll('button')).find(b => /send|gönder/i.test((b.textContent || '').trim()))
         if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') { btn.click(); return }
         el.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true }))
       }, 450)
