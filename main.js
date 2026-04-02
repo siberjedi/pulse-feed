@@ -390,18 +390,9 @@ ipcMain.handle('broadcast', async (_, text, targets) => {
       const result = await view.webContents.executeJavaScript(script)
       if (siteId === 'deepseek') {
         if (result === 'no_input') {
-          const { width, height } = view.getBounds()
-          const x = Math.floor(width * 0.5)
-          const y = Math.floor(height * 0.92)
-          view.webContents.sendInputEvent({ type: 'mouseMove', x, y })
-          view.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 })
-          view.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 })
-          await new Promise(resolve => setTimeout(resolve, 80))
-          view.webContents.insertText(text)
-          await new Promise(resolve => setTimeout(resolve, 120))
-          view.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' })
-          view.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' })
-          results[siteId] = 'ok_mouse_fallback'
+          await new Promise(resolve => setTimeout(resolve, 1200))
+          const retryResult = await view.webContents.executeJavaScript(script)
+          results[siteId] = retryResult
           return
         }
       }
